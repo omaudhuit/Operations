@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 
 class PricingModel:
     def __init__(self, base_cost, margin, volume_discount, risk_factors, cashflow_model):
@@ -39,23 +40,25 @@ class PricingModel:
         best_option = min(adjusted_results, key=adjusted_results.get)
         return adjusted_results, best_option
 
-# Streamlit UI
-st.title("ERD Pricing Model Evaluation")
+# Sidebar: User Inputs
+st.sidebar.header("User Inputs")
 
-# User Inputs
-base_cost = st.number_input("Manufacturing Cost per Unit (€)", value=2000)
-margin = st.slider("Profit Margin (%)", 0, 100, 30) / 100
-order_quantity = st.number_input("Order Quantity", value=300)
+# COGS and Margin Inputs
+base_cost = st.sidebar.number_input("COGS per Unit (€)", value=2000)
+margin = st.sidebar.slider("Profit Margin (%)", 0, 100, 30) / 100
+
+# Order Quantity Input
+order_quantity = st.sidebar.number_input("Order Quantity", value=300)
 
 # Volume discount structure
 volume_discount = {200: 0.02, 300: 0.05, 400: 0.1}
 
 # Risk Factor Inputs
-st.subheader("Risk Factors (as % Impact)")
-supply_chain_risk = st.slider("Supply Chain Risk (%)", 0, 10, 5)
-regulatory_risk = st.slider("Regulatory Compliance Risk (%)", 0, 10, 3)
-payment_risk = st.slider("Payment Delay Risk (%)", 0, 10, 4)
-competition_risk = st.slider("Competitive Market Pressure (%)", 0, 10, 2)
+st.sidebar.subheader("Risk Factors (as % Impact)")
+supply_chain_risk = st.sidebar.slider("Supply Chain Risk (%)", 0, 10, 5)
+regulatory_risk = st.sidebar.slider("Regulatory Compliance Risk (%)", 0, 10, 3)
+payment_risk = st.sidebar.slider("Payment Delay Risk (%)", 0, 10, 4)
+competition_risk = st.sidebar.slider("Competitive Market Pressure (%)", 0, 10, 2)
 
 risk_factors = {
     "Supply Chain Risk": supply_chain_risk,
@@ -65,16 +68,45 @@ risk_factors = {
 }
 
 # Cash Flow Options
-st.subheader("Cash Flow Management Strategy")
-cashflow_model = st.selectbox("Select Payment Structure", ["upfront", "milestone", "delayed"])
+st.sidebar.subheader("Cash Flow Management Strategy")
+cashflow_model = st.sidebar.selectbox("Select Payment Structure", ["upfront", "milestone", "delayed"])
 
-# Model Evaluation
+# Create Tabs for Results and Sensitivity Analysis
+tabs = st.tabs(["Results", "Sensitivity Analysis"])
+
+# Instantiate Pricing Model
 pricing_model = PricingModel(base_cost, margin, volume_discount, risk_factors, cashflow_model)
-pricing_results, best_pricing_option = pricing_model.evaluate_deal(order_quantity)
 
-# Display Results
-st.subheader("Pricing Evaluation Results")
-df = pd.DataFrame.from_dict(pricing_results, orient='index', columns=['Price per Unit (€)'])
-st.dataframe(df)
+with tabs[0]:
+    st.title("ERD Pricing Model Evaluation - Results")
+    # Model Evaluation for the selected order_quantity
+    pricing_results, best_pricing_option = pricing_model.evaluate_deal(order_quantity)
+    df = pd.DataFrame.from_dict(pricing_results, orient='index', columns=['Price per Unit (€)'])
+    st.dataframe(df)
+    st.success(f"Best Pricing Model: {best_pricing_option}")
 
-st.success(f"**Best Pricing Model:** {best_pricing_option}")
+with tabs[1]:
+    st.title("Sensitivity Analysis")
+    st.write("Analysis over a range of Order Quantities")
+    # Run sensitivity analysis over a range of order quantities
+    quantities = np.arange(100, 501, 50)
+    sensitivity_data = {"Order Quantity": quantities}
+    cost_plus_prices = []
+    tiered_prices = []
+    best_option = []
+    
+    for qty in quantities:
+        results, best = pricing_model.evaluate_deal(qty)
+        cost_plus_prices.append(results["Cost-Plus Pricing"])
+        tiered_prices.append(results["Tiered Pricing"])
+        best_option.append(best)
+    
+    sa_df = pd.DataFrame({
+        "Order Quantity": quantities,
+        "Cost-Plus Pricing": cost_plus_prices,
+        "Tiered Pricing": tiered_prices,
+        "Best Option": best_option
+    })
+    
+    st.dataframe(sa_df)
+    st.line_chart(sa_df.set_index("Order Quantity")[["Cost-Plus Pricing", "Tiered Pricing"]])
