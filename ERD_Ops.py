@@ -174,9 +174,9 @@ delayed_surcharge = st.sidebar.number_input("Delayed Cash Flow Surcharge (%)", m
 
 # Milestone Payment Arrangement Inputs
 st.sidebar.header("Milestone Payment Arrangement")
-upfront_payment_pct = st.sidebar.number_input("Upfront Payment (%)", min_value=0, max_value=100, value=30) / 100
-milestone_payment_pct = st.sidebar.number_input("Milestone Payment (%)", min_value=0, max_value=100, value=40) / 100
-final_payment_pct = st.sidebar.number_input("Final Payment (%)", min_value=0, max_value=100, value=30) / 100
+upfront_payment_pct = st.sidebar.number_input("Upfront Payment (%)", min_value=0, max_value=100, value=40) / 100
+milestone_payment_pct = st.sidebar.number_input("Milestone Payment (%)", min_value=0, max_value=100, value=0) / 100
+final_payment_pct = st.sidebar.number_input("Final Payment (%)", min_value=0, max_value=100, value=60) / 100
 
 # Supply Chain Inputs for EOQ Calculation
 st.sidebar.header("Supply Chain Inputs")
