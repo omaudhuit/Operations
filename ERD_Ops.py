@@ -4,13 +4,17 @@ import pandas as pd
 import numpy as np
 
 class PricingModel:
-    def __init__(self, base_cost, margin, volume_discount, risk_factors, cashflow_model, customer_value):
+    def __init__(self, base_cost, margin, volume_discount, risk_factors, cashflow_model, 
+                 customer_value, cashflow_upfront, cashflow_milestone, cashflow_delayed):
         self.base_cost = base_cost
         self.margin = margin
         self.volume_discount = volume_discount
         self.risk_factors = risk_factors
         self.cashflow_model = cashflow_model
         self.customer_value = customer_value
+        self.cashflow_upfront = cashflow_upfront      # e.g., 5% discount => 0.05
+        self.cashflow_milestone = cashflow_milestone  # e.g., 2% surcharge => 0.02
+        self.cashflow_delayed = cashflow_delayed      # e.g., 5% surcharge => 0.05
 
     def get_volume_discount(self, order_quantity):
         """Determine volume discount based on thresholds."""
@@ -58,8 +62,9 @@ class PricingModel:
         Returns:
             raw_results: Prices per unit after risk adjustments (before cash flow adjustments).
             final_results: Prices per unit after applying cash flow adjustments.
+            vat_results: Final prices including VAT (24%).
             gross_profits: Gross profit calculated as (Final Adjusted Price per Unit - COGS) * Order Quantity.
-            best_option: The best pricing model (lowest final adjusted price).
+            best_option: The best pricing model (based on highest gross profit).
         """
         cost_plus = self.cost_plus_pricing(order_quantity)
         tiered = self.tiered_pricing(order_quantity)
@@ -76,20 +81,23 @@ class PricingModel:
         # Save raw results before cash flow adjustments in final_results
         final_results = raw_results.copy()
 
-        # Apply cash flow model impact
+        # Apply cash flow model impact based on user-defined multipliers
         if self.cashflow_model == "upfront":
-            final_results = {k: v * 0.95 for k, v in final_results.items()}
+            final_results = {k: v * (1 - self.cashflow_upfront) for k, v in final_results.items()}
         elif self.cashflow_model == "milestone":
-            final_results = {k: v * 1.02 for k, v in final_results.items()}
+            final_results = {k: v * (1 + self.cashflow_milestone) for k, v in final_results.items()}
         elif self.cashflow_model == "delayed":
-            final_results = {k: v * 1.05 for k, v in final_results.items()}
+            final_results = {k: v * (1 + self.cashflow_delayed) for k, v in final_results.items()}
+
+        # Compute VAT on final price (24% VAT in Greece)
+        vat_results = {k: v * 1.24 for k, v in final_results.items()}
 
         # Compute Gross Profit: (Final Adjusted Price per Unit - COGS) * order_quantity
         gross_profits = {k: (v - self.base_cost) * order_quantity for k, v in final_results.items()}
 
-        # Select best pricing model based on the lowest final adjusted price
-        best_option = min(final_results, key=final_results.get)
-        return raw_results, final_results, gross_profits, best_option
+        # Select best pricing model based on the highest Gross Profit
+        best_option = max(gross_profits, key=gross_profits.get)
+        return raw_results, final_results, vat_results, gross_profits, best_option
 
 # Sidebar: User Inputs
 
@@ -123,9 +131,12 @@ risk_factors = {
     "Competition Risk": competition_risk,
 }
 
-# Cash Flow Options
+# Cash Flow Inputs
 st.sidebar.subheader("Cash Flow Management Strategy")
 cashflow_model = st.sidebar.selectbox("Select Payment Structure", ["upfront", "milestone", "delayed"])
+upfront_discount = st.sidebar.number_input("Upfront Cash Flow Discount (%)", min_value=0, max_value=100, value=5) / 100
+milestone_surcharge = st.sidebar.number_input("Milestone Cash Flow Surcharge (%)", min_value=0, max_value=100, value=2) / 100
+delayed_surcharge = st.sidebar.number_input("Delayed Cash Flow Surcharge (%)", min_value=0, max_value=100, value=5) / 100
 
 # Supply Chain Inputs for EOQ Calculation
 st.sidebar.header("Supply Chain Inputs")
@@ -144,16 +155,18 @@ st.sidebar.write(f"Calculated EOQ: {eoq:.2f} units")
 tabs = st.tabs(["Results", "Sensitivity Analysis", "Supply Chain"])
 
 # Instantiate Pricing Model
-pricing_model = PricingModel(base_cost, margin, volume_discount, risk_factors, cashflow_model, customer_value)
+pricing_model = PricingModel(base_cost, margin, volume_discount, risk_factors, cashflow_model, 
+                             customer_value, upfront_discount, milestone_surcharge, delayed_surcharge)
 
 with tabs[0]:
     st.title("ERD Pricing Model Evaluation - Results")
-    raw_results, final_results, gross_profits, best_pricing_option = pricing_model.evaluate_deal(order_quantity)
+    raw_results, final_results, vat_results, gross_profits, best_pricing_option = pricing_model.evaluate_deal(order_quantity)
     
-    # Display the calculated values in a table
+    # Display the calculated values in a table, including a VAT column
     df = pd.DataFrame({
         "Raw Price per Unit (€)": raw_results,
         "Final Price per Unit (€)": final_results,
+        "Final Price with VAT (€)": vat_results,
         "Gross Profit (€)": gross_profits
     })
     st.dataframe(df)
@@ -179,24 +192,25 @@ with tabs[0]:
     with st.expander("Explanation of Value-Based Pricing Calculation"):
         st.write("1. **Customer Perceived Value:**")
         st.write("   - The value-based pricing method uses the customer’s perceived value directly as the price per unit.")
-        st.write("   - It does not derive from COGS or a margin calculation, but is based on what customers are willing to pay.")
-        st.write("   - This approach is typically used when the market supports a premium price or when differentiation adds value.")
+        st.write("   - It is not derived from COGS or a margin; rather it reflects what customers are willing to pay.")
+        st.write("   - This approach is useful when a premium price is supported by market differentiation.")
     
     with st.expander("Explanation of Risk Factor & Cash Flow Adjustments"):
         st.write("1. **Risk Factor Adjustment:**")
-        st.write("   - Prices are increased by the sum of all risk factors (as a percentage). For example, with a total risk of 10%, prices are multiplied by 1.10.")
+        st.write("   - Prices are increased by the sum of all risk factors (expressed as a percentage). "
+                 "For example, with a total risk of 10%, prices are multiplied by 1.10.")
         st.write("2. **Cash Flow Management Adjustment:**")
-        st.write("   - After risk adjustments, a cash flow strategy is applied:")
-        st.write("     - 'upfront' applies a 5% discount (multiplies by 0.95),")
-        st.write("     - 'milestone' increases prices by 2% (multiplies by 1.02),")
-        st.write("     - 'delayed' increases prices by 5% (multiplies by 1.05).")
+        st.write("   - After risk adjustments, a cash flow strategy is applied based on the user-defined inputs:")
+        st.write(f"     - 'upfront' applies a {upfront_discount*100:.0f}% discount (multiplies by 1 - {upfront_discount:.2f}).")
+        st.write(f"     - 'milestone' increases prices by {milestone_surcharge*100:.0f}% (multiplies by 1 + {milestone_surcharge:.2f}).")
+        st.write(f"     - 'delayed' increases prices by {delayed_surcharge*100:.0f}% (multiplies by 1 + {delayed_surcharge:.2f}).")
     
     with st.expander("Explanation of Gross Profit Calculation"):
-        st.write("Gross Profit is calculated as follows:")
+        st.write("Gross Profit is calculated as:")
         st.write("   - **Gross Profit = (Final Adjusted Price per Unit - COGS) * Order Quantity**")
-        st.write("   - This reflects the profit per unit after all adjustments, multiplied by the number of units ordered.")
+        st.write("   - This represents the per-unit profit (after all adjustments) multiplied by the number of units ordered.")
     
-    st.success(f"Best Pricing Model: {best_pricing_option}")
+    st.success(f"Best Pricing Model (based on highest Gross Profit): {best_pricing_option}")
 
 with tabs[1]:
     st.title("Sensitivity Analysis")
@@ -207,7 +221,7 @@ with tabs[1]:
     value_based_prices = []
     best_option = []
     for qty in quantities:
-        raw, final, _, best = pricing_model.evaluate_deal(qty)
+        raw, final, _, gross, best = pricing_model.evaluate_deal(qty)
         raw_cp.append(raw["Cost-Plus Pricing"])
         final_cp.append(final["Cost-Plus Pricing"])
         value_based_prices.append(final["Value-Based Pricing"])
