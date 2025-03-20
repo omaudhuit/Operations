@@ -97,12 +97,17 @@ class PricingModel:
         # Compute Gross Profit: (Final Adjusted Price per Unit - COGS) * Order Quantity
         gross_profits = {k: (v - self.base_cost) * order_quantity for k, v in final_results.items()}
 
+        # Round all results to 2 decimal places
+        raw_results = {k: round(v, 2) for k, v in raw_results.items()}
+        final_results = {k: round(v, 2) for k, v in final_results.items()}
+        vat_results = {k: round(v, 2) for k, v in vat_results.items()}
+        gross_profits = {k: round(v, 2) for k, v in gross_profits.items()}
+
         # Select best pricing model based on the highest Gross Profit
         best_option = max(gross_profits, key=gross_profits.get)
         return raw_results, final_results, vat_results, gross_profits, best_option
 
 # Sidebar: User Inputs
-
 st.sidebar.header("User Inputs")
 
 # Pricing Model Inputs
