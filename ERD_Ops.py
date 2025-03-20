@@ -386,7 +386,7 @@ with tabs[3]:
     """
     st.markdown(timeline)
     
-    # If the cash flow model is set to milestone, display the payment breakdown amounts.
+    # If the cash flow model is set to milestone, display the payment breakdown amounts for the entire order.
     if cashflow_model == "milestone":
         # Re-evaluate the deal to get the final prices and best pricing model.
         _, final_results_tmp, _, _, best_option_tmp = pricing_model.evaluate_deal(order_quantity)
@@ -400,11 +400,17 @@ with tabs[3]:
         ratio_milestone = (milestone_payment_pct * (1 + milestone_surcharge)) / weighted_factor
         ratio_final = (final_payment_pct * (1 + delayed_surcharge)) / weighted_factor
         
+        # Compute payment amounts per unit.
         amount_upfront = best_final_price * ratio_upfront
         amount_milestone = best_final_price * ratio_milestone
         amount_final = best_final_price * ratio_final
         
-        st.write(f"**Milestone Payment Breakdown (Best Pricing Model: {best_option_tmp}):**")
-        st.write(f"Upfront Payment: €{amount_upfront:.2f}")
-        st.write(f"Milestone Payment: €{amount_milestone:.2f}")
-        st.write(f"Final Payment: €{amount_final:.2f}")
+        # Multiply by order quantity to get total payment amounts.
+        total_amount_upfront = amount_upfront * order_quantity
+        total_amount_milestone = amount_milestone * order_quantity
+        total_amount_final = amount_final * order_quantity
+        
+        st.write(f"**Milestone Payment Breakdown for the Entire Order (Best Pricing Model: {best_option_tmp}):**")
+        st.write(f"Upfront Payment: €{total_amount_upfront:.2f}")
+        st.write(f"Milestone Payment: €{total_amount_milestone:.2f}")
+        st.write(f"Final Payment: €{total_amount_final:.2f}")
