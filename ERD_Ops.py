@@ -2,6 +2,8 @@ import math
 import streamlit as st
 import pandas as pd
 import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 class PricingModel:
     def __init__(self, base_cost, margin, volume_discount, risk_factors, cashflow_model, 
@@ -92,7 +94,7 @@ class PricingModel:
         # Compute VAT on final price (24% VAT in Greece)
         vat_results = {k: v * 1.24 for k, v in final_results.items()}
 
-        # Compute Gross Profit: (Final Adjusted Price per Unit - COGS) * order_quantity
+        # Compute Gross Profit: (Final Adjusted Price per Unit - COGS) * Order Quantity
         gross_profits = {k: (v - self.base_cost) * order_quantity for k, v in final_results.items()}
 
         # Select best pricing model based on the highest Gross Profit
@@ -214,27 +216,83 @@ with tabs[0]:
 
 with tabs[1]:
     st.title("Sensitivity Analysis")
-    st.write("Analysis over a range of Order Quantities")
-    quantities = np.arange(100, 501, 50)
-    raw_cp = []
-    final_cp = []
-    value_based_prices = []
-    best_option = []
-    for qty in quantities:
-        raw, final, _, gross, best = pricing_model.evaluate_deal(qty)
-        raw_cp.append(raw["Cost-Plus Pricing"])
-        final_cp.append(final["Cost-Plus Pricing"])
-        value_based_prices.append(final["Value-Based Pricing"])
-        best_option.append(best)
-    sa_df = pd.DataFrame({
-        "Order Quantity": quantities,
-        "Raw Cost-Plus Price (€)": raw_cp,
-        "Final Cost-Plus Price (€)": final_cp,
-        "Value-Based Pricing (€)": value_based_prices,
-        "Best Option": best_option
-    })
-    st.dataframe(sa_df)
-    st.line_chart(sa_df.set_index("Order Quantity")[["Raw Cost-Plus Price (€)", "Final Cost-Plus Price (€)", "Value-Based Pricing (€)"]])
+    st.write("Explore how changes in key parameters impact Gross Profit.")
+    param = st.selectbox("Select parameter to vary", ["Order Quantity", "Margin", "Risk Factor", "Order Quantity and Margin"])
+    
+    if param == "Order Quantity":
+        quantities = np.arange(100, 1001, 50)
+        sim_list = []
+        for qty in quantities:
+            _, _, _, gross, _ = pricing_model.evaluate_deal(qty)
+            sim_list.append({
+                "Order Quantity": qty,
+                "Cost-Plus Gross Profit": gross["Cost-Plus Pricing"],
+                "Tiered Gross Profit": gross["Tiered Pricing"],
+                "Value-Based Gross Profit": gross["Value-Based Pricing"]
+            })
+        sim_df = pd.DataFrame(sim_list)
+        st.dataframe(sim_df)
+        st.line_chart(sim_df.set_index("Order Quantity")[["Cost-Plus Gross Profit", "Tiered Gross Profit", "Value-Based Gross Profit"]])
+    
+    elif param == "Margin":
+        margins = np.linspace(0.1, 0.9, 20)
+        sim_list = []
+        for m in margins:
+            temp_model = PricingModel(base_cost, m, volume_discount, risk_factors, cashflow_model,
+                                      customer_value, upfront_discount, milestone_surcharge, delayed_surcharge)
+            _, _, _, gross, _ = temp_model.evaluate_deal(order_quantity)
+            sim_list.append({
+                "Margin": m,
+                "Cost-Plus Gross Profit": gross["Cost-Plus Pricing"],
+                "Tiered Gross Profit": gross["Tiered Pricing"],
+                "Value-Based Gross Profit": gross["Value-Based Pricing"]
+            })
+        sim_df = pd.DataFrame(sim_list)
+        st.dataframe(sim_df)
+        st.line_chart(sim_df.set_index("Margin")[["Cost-Plus Gross Profit", "Tiered Gross Profit", "Value-Based Gross Profit"]])
+    
+    elif param == "Risk Factor":
+        risk_values = np.linspace(0, 20, 21)
+        sim_list = []
+        for r in risk_values:
+            risk_dict = {
+                "Supply Chain Risk": r,
+                "Regulatory Risk": r,
+                "Payment Risk": r,
+                "Competition Risk": r
+            }
+            temp_model = PricingModel(base_cost, margin, volume_discount, risk_dict, cashflow_model,
+                                      customer_value, upfront_discount, milestone_surcharge, delayed_surcharge)
+            _, _, _, gross, _ = temp_model.evaluate_deal(order_quantity)
+            sim_list.append({
+                "Total Risk (%)": r,
+                "Cost-Plus Gross Profit": gross["Cost-Plus Pricing"],
+                "Tiered Gross Profit": gross["Tiered Pricing"],
+                "Value-Based Gross Profit": gross["Value-Based Pricing"]
+            })
+        sim_df = pd.DataFrame(sim_list)
+        st.dataframe(sim_df)
+        st.line_chart(sim_df.set_index("Total Risk (%)")[["Cost-Plus Gross Profit", "Tiered Gross Profit", "Value-Based Gross Profit"]])
+    
+    elif param == "Order Quantity and Margin":
+        # 2D Sensitivity analysis: vary both order quantity and margin, showing Cost-Plus Gross Profit
+        quantities = np.arange(100, 1001, 50)
+        margins = np.linspace(0.1, 0.9, 20)
+        heat_data = np.zeros((len(margins), len(quantities)))
+        for i, m in enumerate(margins):
+            for j, qty in enumerate(quantities):
+                temp_model = PricingModel(base_cost, m, volume_discount, risk_factors, cashflow_model,
+                                          customer_value, upfront_discount, milestone_surcharge, delayed_surcharge)
+                _, _, _, gross, _ = temp_model.evaluate_deal(qty)
+                heat_data[i, j] = gross["Cost-Plus Pricing"]
+        # Create a heatmap using seaborn
+        fig, ax = plt.subplots()
+        sns.heatmap(heat_data, xticklabels=quantities, yticklabels=np.round(margins,2),
+                    cmap="YlGnBu", ax=ax)
+        ax.set_xlabel("Order Quantity")
+        ax.set_ylabel("Margin")
+        ax.set_title("Cost-Plus Gross Profit Heatmap")
+        st.pyplot(fig)
 
 with tabs[2]:
     st.title("Supply Chain EOQ Calculation")
