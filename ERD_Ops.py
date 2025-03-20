@@ -194,9 +194,9 @@ st.sidebar.header("Working Capital Inputs")
 days_inventory = st.sidebar.number_input("Days Inventory Outstanding (DIO)", value=45)
 days_receivables = st.sidebar.number_input("Days Sales Outstanding (DSO)", value=30)
 days_payables = st.sidebar.number_input("Days Payable Outstanding (DPO)", value=40)
+delivery_days = st.sidebar.number_input("Delivery Time (days)", min_value=1, max_value=365, value=30)
 
 # Add new user input for delivery time
-delivery_days = st.sidebar.number_input("Delivery Time (days)", min_value=1, max_value=365, value=30)
 
 # ---------------------------
 # Create Tabs for Results, Sensitivity Analysis, Supply Chain, and Cash Conversion Cycle
