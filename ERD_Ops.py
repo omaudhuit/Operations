@@ -12,28 +12,36 @@ class PricingModel:
         self.cashflow_model = cashflow_model
         self.customer_value = customer_value
 
+    def get_volume_discount(self, order_quantity):
+        """Determine volume discount based on thresholds."""
+        if order_quantity >= 400:
+            return self.volume_discount.get(400, 0)
+        elif order_quantity >= 300:
+            return self.volume_discount.get(300, 0)
+        elif order_quantity >= 200:
+            return self.volume_discount.get(200, 0)
+        else:
+            return 0
+
     def cost_plus_pricing(self, order_quantity):
         """Computes the cost-plus price:
            Price = COGS / (1 - margin) with an applied volume discount (if any)."""
         raw_price = self.base_cost / (1 - self.margin)
-        vol_disc = self.volume_discount.get(order_quantity, 0)
+        vol_disc = self.get_volume_discount(order_quantity)
         return raw_price * (1 - vol_disc)
 
     def tiered_pricing(self, order_quantity):
-        """For tiered pricing we start from the raw cost-plus base (without any discount)
-           and then apply:
+        """For tiered pricing we start from the raw cost-plus base, then apply:
              - the volume discount (if set) and
              - an extra discount if order_quantity thresholds are met.
-           If the volume discount is 0, no additional discount is applied."""
+           If the volume discount is 0, no extra discount is applied."""
         raw_price = self.base_cost / (1 - self.margin)
-        vol_disc = self.volume_discount.get(order_quantity, 0)
-        # Apply volume discount first
+        vol_disc = self.get_volume_discount(order_quantity)
         price_after_vol = raw_price * (1 - vol_disc)
+        # Only apply an extra discount if a volume discount exists
         if vol_disc == 0:
-            # No extra discount if user disabled volume discount
             return raw_price
         else:
-            # Apply an extra tiered discount based on order quantity
             if order_quantity >= 400:
                 return price_after_vol * 0.9
             elif order_quantity >= 300:
