@@ -30,26 +30,22 @@ class PricingModel:
             return 0
 
     def cost_plus_pricing(self, order_quantity):
-        """
-        Computes the cost-plus price with volume discount applied.
-        Price = (COGS / (1 - Margin)) * (1 - Volume Discount)
-        """
-        raw_price = self.base_cost / (1 - self.margin)
+        """Computes the cost-plus price with volume discount applied.
+           Price = (COGS / (1 - Margin)) * (1 - Volume Discount)"""
+        baseline_raw = self.base_cost / (1 - self.margin)
         vol_disc = self.get_volume_discount(order_quantity)
-        return raw_price * (1 - vol_disc)
+        return baseline_raw * (1 - vol_disc)
 
     def tiered_pricing(self, order_quantity):
-        """
-        For tiered pricing we start with the raw cost-plus base, then:
-         - Apply the volume discount
-         - If discount is active,use extra discount based on order quantity thresholds.
-           If no volume discount is present, no extra discount is applied.
-        """
-        raw_price = self.base_cost / (1 - self.margin)
+        """For tiered pricing we start from the raw cost-plus base, then:
+             - Apply the volume discount, and if a discount is in effect,
+             - Apply an extra discount based on order quantity thresholds.
+           If no volume discount is set, extra discount is not applied."""
+        baseline_raw = self.base_cost / (1 - self.margin)
         vol_disc = self.get_volume_discount(order_quantity)
-        price_after_vol = raw_price * (1 - vol_disc)
+        price_after_vol = baseline_raw * (1 - vol_disc)
         if vol_disc == 0:
-            return raw_price
+            return baseline_raw
         else:
             if order_quantity >= 400:
                 return price_after_vol * 0.9
@@ -68,54 +64,55 @@ class PricingModel:
         Returns:
             raw_results: Prices per unit after risk adjustments (before cash flow adjustments).
             final_results: Prices per unit after applying cash flow adjustments.
-            vat_results: Final prices including VAT (24% VAT in Greece).
+            vat_results: Final prices including VAT (24%).
             gross_profits: Gross profit = (Final Adjusted Price - COGS) * Order Quantity.
             best_option: The best pricing model (based on highest gross profit).
-            cp_raw_no_disc: Cost-Plus raw price without volume discount.
+            cp_raw_no_disc: Cost-Plus baseline raw price (without volume discount).
             cp_raw_with_disc: Cost-Plus raw price with volume discount applied.
         """
-        # Baseline raw price for cost-plus (no volume discount)
+        # Compute baseline raw price for cost-plus (no volume discount)
         baseline_raw = self.base_cost / (1 - self.margin)
         vol_disc = self.get_volume_discount(order_quantity)
         cp_raw_no_disc = round(baseline_raw, 2)
         cp_raw_with_disc = round(baseline_raw * (1 - vol_disc), 2)
         
-        # Pricing per model
+        # Compute pricing for each model (for cost-plus, tiered and value-based)
         cost_plus = self.cost_plus_pricing(order_quantity)
         tiered = self.tiered_pricing(order_quantity)
         value_based = self.value_based_pricing(order_quantity)
-        
+
         # Apply risk factor adjustments
-        total_risk_factor = sum(self.risk_factors.values()) / 100
+        total_risk_factor = sum(self.risk_factors.values()) / 100  # Convert % to multiplier
         raw_results = {
             "Cost-Plus Pricing": cost_plus * (1 + total_risk_factor),
             "Tiered Pricing": tiered * (1 + total_risk_factor),
             "Value-Based Pricing": value_based * (1 + total_risk_factor)
         }
-        
-        # Copy results before cash flow adjustments
+
+        # Save raw results before cash flow adjustments in final_results
         final_results = raw_results.copy()
-        
-        # Apply cash flow adjustments
+
+        # Apply cash flow model impact based on user-defined multipliers
         if self.cashflow_model == "upfront":
             final_results = {k: v * (1 - self.cashflow_upfront) for k, v in final_results.items()}
         elif self.cashflow_model == "milestone":
             final_results = {k: v * (1 + self.cashflow_milestone) for k, v in final_results.items()}
         elif self.cashflow_model == "delayed":
             final_results = {k: v * (1 + self.cashflow_delayed) for k, v in final_results.items()}
-        
-        # Compute VAT (24% in Greece)
+
+        # Compute VAT on final price (24% VAT in Greece)
         vat_results = {k: v * 1.24 for k, v in final_results.items()}
-        
+
         # Compute Gross Profit: (Final Adjusted Price per Unit - COGS) * Order Quantity
         gross_profits = {k: (v - self.base_cost) * order_quantity for k, v in final_results.items()}
-        
-        # Round all results
+
+        # Round all results to 2 decimal places
         raw_results = {k: round(v, 2) for k, v in raw_results.items()}
         final_results = {k: round(v, 2) for k, v in final_results.items()}
         vat_results = {k: round(v, 2) for k, v in vat_results.items()}
         gross_profits = {k: round(v, 2) for k, v in gross_profits.items()}
-        
+
+        # Select best pricing model based on the highest Gross Profit
         best_option = max(gross_profits, key=gross_profits.get)
         return raw_results, final_results, vat_results, gross_profits, best_option, cp_raw_no_disc, cp_raw_with_disc
 
@@ -130,7 +127,7 @@ customer_value = st.sidebar.number_input("Customer Perceived Value (€)", value
 # Order Quantity Input
 order_quantity = st.sidebar.number_input("Order Quantity", value=300)
 
-# Volume Discount Inputs
+# Volume Discount Inputs as User Defined
 st.sidebar.header("Volume Discount Inputs")
 discount_200 = st.sidebar.number_input("Discount at Order Quantity 200 (%)", min_value=0, max_value=100, value=0) / 100
 discount_300 = st.sidebar.number_input("Discount at Order Quantity 300 (%)", min_value=0, max_value=100, value=0) / 100
@@ -147,7 +144,7 @@ risk_factors = {
     "Supply Chain Risk": supply_chain_risk,
     "Regulatory Risk": regulatory_risk,
     "Payment Risk": payment_risk,
-    "Competition Risk": competition_risk
+    "Competition Risk": competition_risk,
 }
 
 # Cash Flow Inputs
@@ -163,6 +160,7 @@ annual_demand = st.sidebar.number_input("Annual Demand (units)", value=10000)
 ordering_cost = st.sidebar.number_input("Ordering Cost per Order (€)", value=50)
 holding_cost = st.sidebar.number_input("Inventory Holding Cost per Unit (€)", value=2)
 
+# Compute EOQ
 if holding_cost > 0:
     eoq = math.sqrt((2 * annual_demand * ordering_cost) / holding_cost)
 else:
@@ -180,7 +178,7 @@ with tabs[0]:
     st.title("ERD Pricing Model Evaluation - Results")
     raw_results, final_results, vat_results, gross_profits, best_pricing_option, cp_raw_no_disc, cp_raw_with_disc = pricing_model.evaluate_deal(order_quantity)
     
-    # Display calculated values
+    # Display the calculated values in a table (including the new raw price columns for cost-plus)
     df = pd.DataFrame({
         "Cost-Plus Raw Price (No Vol. Disc) (€)": [cp_raw_no_disc],
         "Cost-Plus Raw Price (with Vol. Disc) (€)": [cp_raw_with_disc],
@@ -191,38 +189,42 @@ with tabs[0]:
     })
     st.dataframe(df)
     
-    # Explanation Expanders
+    # Detailed explanation sections using expanders
     with st.expander("Explanation of Cost-Plus Pricing Calculation"):
         st.write("1. **Raw Price Calculation (No Volume Discount):**")
-        st.write(f"   - Calculated as: COGS / (1 - Margin) = {base_cost} / (1 - {margin:.2f}) ≈ {base_cost/(1-margin):.2f}.")
+        st.write("   - Computed as: **COGS / (1 - Margin)**.")
+        st.write(f"   - For COGS = {base_cost} and Margin = {margin*100:.0f}%, the raw price is {base_cost/(1-margin):.2f}.")
         st.write("2. **Volume Discount Application:**")
-        st.write(f"   - A volume discount of {pricing_model.get_volume_discount(order_quantity)*100:.0f}% is applied for this order quantity, yielding a discounted raw price of {cp_raw_with_disc:.2f} €.")
+        st.write("   - A volume discount is applied based on the order quantity threshold.")
+        st.write(f"   - The discount of {pricing_model.get_volume_discount(order_quantity)*100:.0f}% is applied, yielding a price of {cp_raw_with_disc:.2f} €.")
     
     with st.expander("Explanation of Tiered Pricing Calculation"):
         st.write("1. **Tiered Pricing Raw Calculation:**")
-        st.write("   - Starts with the same raw price: COGS / (1 - Margin).")
+        st.write("   - It starts with the same raw price: **COGS / (1 - Margin)**.")
         st.write("2. **Additional Tiered Discount:**")
-        st.write("   - Extra discount applied if order quantity is high:")
+        st.write("   - An extra discount is applied on top of the volume discount if the order quantity is high:")
         st.write("     - ≥ 400 units: extra 10% discount.")
         st.write("     - ≥ 300 units: extra 5% discount.")
-        st.write("   - Otherwise, the discounted raw price remains unchanged.")
+        st.write("   - If no volume discount is active, no extra discount is applied.")
     
     with st.expander("Explanation of Value-Based Pricing Calculation"):
         st.write("1. **Customer Perceived Value:**")
         st.write("   - This method uses the customer’s perceived value directly as the price per unit.")
-        st.write("   - It is not derived from COGS or margin calculations.")
+        st.write("   - It does not derive from COGS or required margin calculations.")
     
     with st.expander("Explanation of Risk Factor & Cash Flow Adjustments"):
         st.write("1. **Risk Factor Adjustment:**")
-        st.write("   - Prices are increased by the sum of all risk factors (e.g., a total risk of 10% multiplies prices by 1.10).")
+        st.write("   - Prices are increased by the sum of all risk factors (as a percentage).")
+        st.write("   - For instance, with a total risk of 10%, prices are multiplied by 1.10.")
         st.write("2. **Cash Flow Management Adjustment:**")
-        st.write(f"   - 'upfront' applies a {upfront_discount*100:.0f}% discount.")
-        st.write(f"   - 'milestone' increases prices by {milestone_surcharge*100:.0f}%.")
-        st.write(f"   - 'delayed' increases prices by {delayed_surcharge*100:.0f}%.")
+        st.write("   - After risk adjustments, a cash flow strategy is applied:")
+        st.write(f"     - 'upfront' applies a {upfront_discount*100:.0f}% discount (× (1 - {upfront_discount:.2f})).")
+        st.write(f"     - 'milestone' increases prices by {milestone_surcharge*100:.0f}% (× (1 + {milestone_surcharge:.2f})).")
+        st.write(f"     - 'delayed' increases prices by {delayed_surcharge*100:.0f}% (× (1 + {delayed_surcharge:.2f})).")
     
     with st.expander("Explanation of Gross Profit Calculation"):
-        st.write("Gross Profit = (Final Adjusted Price per Unit - COGS) * Order Quantity")
-        st.write("This represents the profit per unit (after adjustments) multiplied by the number of units ordered.")
+        st.write("Gross Profit = (Final Adjusted Price per Unit - COGS) × Order Quantity")
+        st.write("This represents the per-unit profit after all adjustments multiplied by the number of units ordered.")
     
     st.success(f"Best Pricing Model (based on highest Gross Profit): {best_pricing_option}")
 
@@ -297,7 +299,7 @@ with tabs[1]:
                 _, _, _, gross, _ = temp_model.evaluate_deal(qty)
                 heat_data[i, j] = gross["Cost-Plus Pricing"]
         fig, ax = plt.subplots()
-        sns.heatmap(heat_data, xticklabels=quantities, yticklabels=np.round(margins,2),
+        sns.heatmap(heat_data, xticklabels=quantities, yticklabels=np.round(margins, 2),
                     cmap="YlGnBu", ax=ax)
         ax.set_xlabel("Order Quantity")
         ax.set_ylabel("Margin")
@@ -311,5 +313,5 @@ with tabs[2]:
     
     with st.expander("How EOQ Impacts Pricing"):
         st.write("Optimizing your order quantity using the EOQ model helps minimize total ordering and holding costs.")
-        st.write("A lower EOQ indicates more frequent replenishment with lower holding costs, leading to better volume pricing negotiations.")
+        st.write("A lower EOQ indicates more frequent replenishment at lower holding costs, which can lead to better negotiation for volume pricing.")
         st.write("Optimized inventory costs support more competitive sales pricing and higher gross margins.")
