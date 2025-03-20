@@ -351,13 +351,36 @@ with tabs[3]:
     st.write(f"**Days Payables Outstanding (DPO):** {days_payables} days")
     st.write(f"**Cash Conversion Cycle (CCC):** {ccc} days")
     
-    # Timeline visualization (a simple horizontal timeline)
+    # Timeline visualization: Plot DIO and DSO as stacked bars and use an arrow to indicate subtraction of DPO
+    fig, ax = plt.subplots(figsize=(10, 2))
+    # Total time for inventory + receivables
+    total = days_inventory + days_receivables
+    # Plot DIO segment
+    ax.broken_barh([(0, days_inventory)], (20, 9), facecolors='skyblue', label='DIO')
+    # Plot DSO segment immediately following DIO
+    ax.broken_barh([(days_inventory, days_receivables)], (20, 9), facecolors='lightgreen', label='DSO')
+    # Draw an annotation arrow indicating DPO's effect:
+    # Arrow from the end of total (DIO+DSO) back to the net CCC value.
+    ax.annotate('', xy=(ccc, 29), xytext=(total, 29),
+                arrowprops=dict(arrowstyle='<->', color='red', lw=2))
+    ax.text((total + ccc) / 2, 31, f'- DPO: {days_payables} days',
+            color='red', ha='center', va='bottom', fontsize=10)
+    ax.set_xlim(0, total + max(0, days_payables) + 5)
+    ax.set_ylim(15, 45)
+    ax.set_xlabel('Days')
+    ax.set_yticks([])
+    ax.legend(loc='upper right', fontsize=9)
+    ax.set_title('Cash Conversion Cycle Timeline')
+    plt.tight_layout()
+    st.pyplot(fig)
+    
+    # Also show a simple textual timeline
     timeline = f"""
     **Timeline:**
     
-      Inventory → Sales → Receivables Collection
-      [DIO: {days_inventory} days] → [DSO: {days_receivables} days] → [DPO: {days_payables} days]
-      
-      *Cash Conversion Cycle = DIO + DSO - DPO = {ccc} days*
+    Inventory → Sales → Receivables Collection  
+    [DIO: {days_inventory} days] → [DSO: {days_receivables} days]  
+    → Subtract [DPO: {days_payables} days]  
+    *Net Cash Conversion Cycle = {ccc} days*
     """
     st.markdown(timeline)
