@@ -30,17 +30,21 @@ class PricingModel:
             return 0
 
     def cost_plus_pricing(self, order_quantity):
-        """Computes the cost-plus price:
-           Raw Price = COGS / (1 - Margin); then if applicable, apply volume discount."""
+        """
+        Computes the cost-plus price with volume discount applied.
+        Price = (COGS / (1 - Margin)) * (1 - Volume Discount)
+        """
         raw_price = self.base_cost / (1 - self.margin)
         vol_disc = self.get_volume_discount(order_quantity)
         return raw_price * (1 - vol_disc)
 
     def tiered_pricing(self, order_quantity):
-        """For tiered pricing we start from the raw cost-plus base, then:
-             - Apply the volume discount, and if a discount is in effect,
-             - Apply an extra discount based on order quantity thresholds.
-           If no volume discount is set, extra discount is not applied."""
+        """
+        For tiered pricing we start with the raw cost-plus base, then:
+         - Apply the volume discount, and if a discount is in effect,
+         - Apply an extra discount based on order quantity thresholds.
+           If no volume discount is set, extra discount is not applied.
+        """
         raw_price = self.base_cost / (1 - self.margin)
         vol_disc = self.get_volume_discount(order_quantity)
         price_after_vol = raw_price * (1 - vol_disc)
@@ -67,23 +71,23 @@ class PricingModel:
             final_results: Prices per unit after applying cash flow adjustments.
                            For Cost‑Plus Pricing, the final price includes the volume discount.
             vat_results: Final prices including VAT (24%).
-            gross_profits: Gross profit calculated as (Final Adjusted Price per Unit - COGS) * Order Quantity.
+            gross_profits: Gross profit = (Final Adjusted Price per Unit - COGS) * Order Quantity.
             best_option: The best pricing model (based on highest gross profit).
         """
-        # Compute baseline raw price (no volume discount) for cost-plus pricing
+        # Compute baseline raw price (no volume discount) for cost-plus pricing.
         cp_raw_no_disc = self.base_cost / (1 - self.margin)
-        # Compute cost-plus final price including volume discount (using our function)
+        # Compute cost-plus final price including volume discount.
         cp_final_with_disc = self.cost_plus_pricing(order_quantity)
         
-        # Calculate pricing for the other models using the existing functions:
+        # Pricing for the other models:
         tiered = self.tiered_pricing(order_quantity)
         value_based = self.value_based_pricing(order_quantity)
         
-        # Calculate total risk factor multiplier from risk factors
+        # Calculate total risk factor multiplier from risk factors.
         total_risk_factor = sum(self.risk_factors.values()) / 100
         
         # Build raw results:
-        # For Cost-Plus Pricing, use baseline raw (without volume discount) and then adjust for risk.
+        # For Cost‑Plus Pricing, use baseline raw (without volume discount) and then adjust for risk.
         raw_results = {
             "Cost-Plus Pricing": cp_raw_no_disc * (1 + total_risk_factor),
             "Tiered Pricing": tiered * (1 + total_risk_factor),
@@ -91,14 +95,14 @@ class PricingModel:
         }
         
         # Build final results:
-        # For Cost-Plus Pricing, include the volume discount.
+        # For Cost‑Plus Pricing, include the volume discount.
         final_results = {
             "Cost-Plus Pricing": cp_final_with_disc * (1 + total_risk_factor),
             "Tiered Pricing": tiered * (1 + total_risk_factor),
             "Value-Based Pricing": value_based * (1 + total_risk_factor)
         }
         
-        # Apply cash flow adjustments to final results
+        # Apply cash flow adjustments to final results.
         if self.cashflow_model == "upfront":
             final_results = {k: v * (1 - self.cashflow_upfront) for k, v in final_results.items()}
         elif self.cashflow_model == "milestone":
@@ -106,19 +110,18 @@ class PricingModel:
         elif self.cashflow_model == "delayed":
             final_results = {k: v * (1 + self.cashflow_delayed) for k, v in final_results.items()}
         
-        # Compute VAT on final prices (24% VAT in Greece)
+        # Compute VAT on final prices (24% VAT in Greece).
         vat_results = {k: v * 1.24 for k, v in final_results.items()}
         
-        # Compute gross profit: (Final Adjusted Price per Unit - COGS) * Order Quantity
+        # Compute gross profit: (Final Adjusted Price per Unit - COGS) * Order Quantity.
         gross_profits = {k: (v - self.base_cost) * order_quantity for k, v in final_results.items()}
-
+        
         # Round all numerical results to 2 decimals.
         raw_results = {k: round(v, 2) for k, v in raw_results.items()}
         final_results = {k: round(v, 2) for k, v in final_results.items()}
         vat_results = {k: round(v, 2) for k, v in vat_results.items()}
         gross_profits = {k: round(v, 2) for k, v in gross_profits.items()}
         
-        # Select best pricing option based on highest gross profit.
         best_option = max(gross_profits, key=gross_profits.get)
         return raw_results, final_results, vat_results, gross_profits, best_option
 
@@ -160,6 +163,12 @@ upfront_discount = st.sidebar.number_input("Upfront Cash Flow Discount (%)", min
 milestone_surcharge = st.sidebar.number_input("Milestone Cash Flow Surcharge (%)", min_value=0, max_value=100, value=0) / 100
 delayed_surcharge = st.sidebar.number_input("Delayed Cash Flow Surcharge (%)", min_value=0, max_value=100, value=0) / 100
 
+# Milestone Payment Arrangement Inputs
+st.sidebar.header("Milestone Payment Arrangement")
+upfront_payment_pct = st.sidebar.number_input("Upfront Payment (%)", min_value=0, max_value=100, value=0) / 100
+milestone_payment_pct = st.sidebar.number_input("Milestone Payment (%)", min_value=0, max_value=100, value=0) / 100
+final_payment_pct = st.sidebar.number_input("Final Payment (%)", min_value=0, max_value=100, value=0) / 100
+
 # Supply Chain Inputs for EOQ Calculation
 st.sidebar.header("Supply Chain Inputs")
 annual_demand = st.sidebar.number_input("Annual Demand (units)", value=10000)
@@ -173,8 +182,14 @@ else:
     eoq = 0
 st.sidebar.write(f"Calculated EOQ: {eoq:.2f} units")
 
-# Create Tabs for Results, Sensitivity Analysis, and Supply Chain
-tabs = st.tabs(["Results", "Sensitivity Analysis", "Supply Chain"])
+# Working Capital Inputs for Cash Conversion Cycle
+st.sidebar.header("Working Capital Inputs")
+days_inventory = st.sidebar.number_input("Days Inventory Outstanding (DIO)", value=45)
+days_receivables = st.sidebar.number_input("Days Sales Outstanding (DSO)", value=30)
+days_payables = st.sidebar.number_input("Days Payable Outstanding (DPO)", value=40)
+
+# Create Tabs for Results, Sensitivity Analysis, Supply Chain, and Cash Conversion Cycle
+tabs = st.tabs(["Results", "Sensitivity Analysis", "Supply Chain", "Cash Conversion Cycle"])
 
 # Instantiate Pricing Model
 pricing_model = PricingModel(base_cost, margin, volume_discount, risk_factors, cashflow_model, 
@@ -325,3 +340,24 @@ with tabs[2]:
         st.write("A lower EOQ indicates that you can replenish stock more frequently with lower holding costs, often enabling better negotiations for volume pricing or discounts from suppliers.")
         st.write("On the sales side, an optimal EOQ helps control overall costs, which can lead to more competitive pricing and higher gross margins.")
         st.write("Essentially, while EOQ is a supply chain metric, its effect on the cost structure indirectly influences your pricing strategy and profitability.")
+
+with tabs[3]:
+    st.title("Cash Conversion Cycle")
+    st.write("This tab shows a timeline for the cash conversion cycle based on working capital inputs.")
+    # Calculate Cash Conversion Cycle: CCC = DIO + DSO – DPO
+    ccc = days_inventory + days_receivables - days_payables
+    st.write(f"**Days Inventory Outstanding (DIO):** {days_inventory} days")
+    st.write(f"**Days Sales Outstanding (DSO):** {days_receivables} days")
+    st.write(f"**Days Payables Outstanding (DPO):** {days_payables} days")
+    st.write(f"**Cash Conversion Cycle (CCC):** {ccc} days")
+    
+    # Timeline visualization (a simple horizontal timeline)
+    timeline = f"""
+    **Timeline:**
+    
+      Inventory → Sales → Receivables Collection
+      [DIO: {days_inventory} days] → [DSO: {days_receivables} days] → [DPO: {days_payables} days]
+      
+      *Cash Conversion Cycle = DIO + DSO - DPO = {ccc} days*
+    """
+    st.markdown(timeline)
