@@ -52,10 +52,10 @@ class PricingModel:
         elif self.cashflow_model == "delayed":
             adjusted_results = {k: v * 1.05 for k, v in adjusted_results.items()}  # 5% increase
 
-        # Compute Gross Profit for each pricing model
-        gross_profits = {k: v - self.base_cost for k, v in adjusted_results.items()}
+        # Compute Gross Profit for each pricing model (per unit profit * order quantity)
+        gross_profits = {k: (v - self.base_cost) * order_quantity for k, v in adjusted_results.items()}
 
-        # Select best pricing model based on the lowest adjusted price (as an example)
+        # Select best pricing model based on the lowest adjusted price (per unit)
         best_option = min(adjusted_results, key=adjusted_results.get)
         return adjusted_results, gross_profits, best_option
 
