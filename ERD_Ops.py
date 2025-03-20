@@ -385,3 +385,26 @@ with tabs[3]:
     *Net Cash Conversion Cycle = {ccc} days*
     """
     st.markdown(timeline)
+    
+    # If the cash flow model is set to milestone, display the payment breakdown amounts.
+    if cashflow_model == "milestone":
+        # Re-evaluate the deal to get the final prices and best pricing model.
+        _, final_results_tmp, _, _, best_option_tmp = pricing_model.evaluate_deal(order_quantity)
+        best_final_price = final_results_tmp[best_option_tmp]
+        # Compute the weighted factor used in milestone adjustments:
+        weighted_factor = (upfront_payment_pct * (1 - upfront_discount) +
+                           milestone_payment_pct * (1 + milestone_surcharge) +
+                           final_payment_pct * (1 + delayed_surcharge))
+        # Compute relative ratios for each payment component.
+        ratio_upfront = (upfront_payment_pct * (1 - upfront_discount)) / weighted_factor
+        ratio_milestone = (milestone_payment_pct * (1 + milestone_surcharge)) / weighted_factor
+        ratio_final = (final_payment_pct * (1 + delayed_surcharge)) / weighted_factor
+        
+        amount_upfront = best_final_price * ratio_upfront
+        amount_milestone = best_final_price * ratio_milestone
+        amount_final = best_final_price * ratio_final
+        
+        st.write(f"**Milestone Payment Breakdown (Best Pricing Model: {best_option_tmp}):**")
+        st.write(f"Upfront Payment: €{amount_upfront:.2f}")
+        st.write(f"Milestone Payment: €{amount_milestone:.2f}")
+        st.write(f"Final Payment: €{amount_final:.2f}")
