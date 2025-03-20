@@ -74,8 +74,12 @@ customer_value = st.sidebar.number_input("Customer Perceived Value (€)", value
 # Order Quantity Input
 order_quantity = st.sidebar.number_input("Order Quantity", value=300)
 
-# Volume discount structure
-volume_discount = {200: 0.02, 300: 0.05, 400: 0.1}
+# Volume Discount Inputs as User Defined
+st.sidebar.header("Volume Discount Inputs")
+discount_200 = st.sidebar.number_input("Discount at Order Quantity 200 (%)", min_value=0, max_value=100, value=2) / 100
+discount_300 = st.sidebar.number_input("Discount at Order Quantity 300 (%)", min_value=0, max_value=100, value=5) / 100
+discount_400 = st.sidebar.number_input("Discount at Order Quantity 400 (%)", min_value=0, max_value=100, value=10) / 100
+volume_discount = {200: discount_200, 300: discount_300, 400: discount_400}
 
 # Risk Factor Inputs (using number_input instead of slider)
 st.sidebar.subheader("Risk Factors (as % Impact)")
