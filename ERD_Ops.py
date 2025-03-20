@@ -25,7 +25,7 @@ class PricingModel:
 
     def cost_plus_pricing(self, order_quantity):
         """Computes the cost-plus price:
-           Raw Price = COGS / (1 - margin); then if applicable, apply volume discount."""
+           Raw Price = COGS / (1 - Margin); then if applicable, apply volume discount."""
         raw_price = self.base_cost / (1 - self.margin)
         vol_disc = self.get_volume_discount(order_quantity)
         return raw_price * (1 - vol_disc)
@@ -66,7 +66,7 @@ class PricingModel:
         value_based = self.value_based_pricing(order_quantity)
 
         # Apply risk factor adjustments
-        total_risk_factor = sum(self.risk_factors.values()) / 100  # converting % to multiplier
+        total_risk_factor = sum(self.risk_factors.values()) / 100  # converting % into multiplier
         raw_results = {
             "Cost-Plus Pricing": cost_plus * (1 + total_risk_factor),
             "Tiered Pricing": tiered * (1 + total_risk_factor),
@@ -116,7 +116,6 @@ supply_chain_risk = st.sidebar.number_input("Supply Chain Risk (%)", min_value=0
 regulatory_risk = st.sidebar.number_input("Regulatory Compliance Risk (%)", min_value=0, max_value=10, value=3)
 payment_risk = st.sidebar.number_input("Payment Delay Risk (%)", min_value=0, max_value=10, value=4)
 competition_risk = st.sidebar.number_input("Competitive Market Pressure (%)", min_value=0, max_value=10, value=2)
-
 risk_factors = {
     "Supply Chain Risk": supply_chain_risk,
     "Regulatory Risk": regulatory_risk,
@@ -159,37 +158,37 @@ with tabs[0]:
     })
     st.dataframe(df)
     
-    # Detailed explanations using expanders
+    # Detailed explanation sections using expanders
     with st.expander("Explanation of Cost-Plus Pricing Calculation"):
         st.write("1. **Raw Price Calculation:**")
         st.write("   - The raw price is computed as: **COGS / (1 - Margin)**.")
         st.write(f"   - For COGS = {base_cost} and Margin = {margin*100:.0f}%, Raw Price = {base_cost} / (1 - {margin:.2f}) ≈ {base_cost/(1-margin):.2f}.")
         st.write("2. **Volume Discount Application:**")
-        st.write("   - A volume discount is applied based on the order quantity threshold. "
-                 "If a discount is defined for the applicable threshold, the raw price is multiplied by (1 - Discount).")
+        st.write("   - A volume discount is applied if the order quantity exceeds certain thresholds. "
+                 "For example, if a discount is defined for the applicable range, the raw price will be reduced accordingly.")
     
     with st.expander("Explanation of Tiered Pricing Calculation"):
         st.write("1. **Tiered Pricing Raw Calculation:**")
         st.write("   - It starts with the same raw price: **COGS / (1 - Margin)**.")
-        st.write("2. **Tiered Discount:**")
-        st.write("   - If a volume discount is active, an extra discount is then applied:")
-        st.write("     - If order quantity >= 400: Extra 10% discount.")
-        st.write("     - If order quantity >= 300: Extra 5% discount.")
-        st.write("   - Otherwise (if no volume discount is set), the extra discount is not applied.")
+        st.write("2. **Additional Tiered Discount:**")
+        st.write("   - An extra discount is applied on top of any volume discount if the order quantity is high:")
+        st.write("     - If order quantity is ≥ 400, an extra 10% discount is applied.")
+        st.write("     - If order quantity is ≥ 300, an extra 5% discount is applied.")
+        st.write("   - If no volume discount is active, no extra discount is applied, and the raw price is used.")
     
     with st.expander("Explanation of Risk Factor & Cash Flow Adjustments"):
         st.write("1. **Risk Factor Adjustment:**")
-        st.write("   - All calculated prices (for each model) are increased by the sum of risk factors (as a percentage).")
-        st.write("   - For example, if the total risk is 10%, the price will be multiplied by 1.10.")
+        st.write("   - The calculated prices are increased by the sum of all risk factors (set as a percentage).")
+        st.write("   - For instance, if the total risk is 10%, prices are multiplied by 1.10.")
         st.write("2. **Cash Flow Management Adjustment:**")
         st.write("   - After risk adjustments, a cash flow strategy is applied:")
-        st.write("     - 'upfront' applies a 5% discount (multiplies by 0.95),")
-        st.write("     - 'milestone' results in a 2% increase (multiplies by 1.02),")
-        st.write("     - 'delayed' results in a 5% increase (multiplies by 1.05).")
+        st.write("     - 'upfront' applies a 5% discount (x 0.95),")
+        st.write("     - 'milestone' increases by 2% (x 1.02), and")
+        st.write("     - 'delayed' increases by 5% (x 1.05).")
     
     with st.expander("Explanation of Gross Profit Calculation"):
         st.write("Gross Profit is computed as: **(Final Adjusted Price per Unit - COGS) * Order Quantity**.")
-        st.write("This gives the total profit before other expenses, based solely on the pricing decision.")
+        st.write("This reflects the per-unit profit obtained after all adjustments, multiplied by the number of units ordered.")
     
     st.success(f"Best Pricing Model: {best_pricing_option}")
 
@@ -221,3 +220,10 @@ with tabs[2]:
     st.title("Supply Chain EOQ Calculation")
     st.write("Supply Chain inputs and EOQ result are provided in the sidebar.")
     st.write(f"Calculated Economic Order Quantity (EOQ): {eoq:.2f} units")
+    
+    # Explanation of EOQ impact on pricing
+    with st.expander("How EOQ Impacts Pricing"):
+        st.write("Optimizing your order quantity using the EOQ model helps minimize the total costs associated with ordering and holding inventory.")
+        st.write("A lower EOQ indicates that you can replenish stock more frequently with lower holding costs, which may allow you to negotiate better volume pricing or discounts from suppliers.")
+        st.write("On the sales side, achieving an optimal EOQ helps control overall costs, allowing for more competitive pricing and higher gross margins.")
+        st.write("Essentially, while EOQ is a supply chain metric, its impact on cost structure can influence your pricing strategy and ultimately improve profitability.")
