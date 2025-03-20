@@ -38,7 +38,6 @@ class PricingModel:
         raw_price = self.base_cost / (1 - self.margin)
         vol_disc = self.get_volume_discount(order_quantity)
         price_after_vol = raw_price * (1 - vol_disc)
-        # Only apply an extra discount if a volume discount exists
         if vol_disc == 0:
             return raw_price
         else:
@@ -54,34 +53,43 @@ class PricingModel:
         return self.customer_value
 
     def evaluate_deal(self, order_quantity):
-        """Evaluates pricing models, applies adjustments, and computes gross profits.
-           Gross Profit is computed as (Adjusted Price per Unit - COGS) * Order Quantity."""
+        """
+        Evaluates pricing models and computes gross profits.
+        Returns:
+            raw_results: Prices after applying risk adjustments.
+            final_results: Prices after applying cash flow adjustments.
+            gross_profits: Gross profit calculated as (Final Price - COGS) * order_quantity.
+            best_option: The best pricing model (lowest final price).
+        """
         cost_plus = self.cost_plus_pricing(order_quantity)
         tiered = self.tiered_pricing(order_quantity)
         value_based = self.value_based_pricing(order_quantity)
 
         # Apply risk factor adjustments
         total_risk_factor = sum(self.risk_factors.values()) / 100  # converting percentage to multiplier
-        adjusted_results = {
+        raw_results = {
             "Cost-Plus Pricing": cost_plus * (1 + total_risk_factor),
             "Tiered Pricing": tiered * (1 + total_risk_factor),
             "Value-Based Pricing": value_based * (1 + total_risk_factor)
         }
 
+        # Save raw results before applying cash flow adjustments
+        final_results = raw_results.copy()
+
         # Apply cash flow model impact
         if self.cashflow_model == "upfront":
-            adjusted_results = {k: v * 0.95 for k, v in adjusted_results.items()}
+            final_results = {k: v * 0.95 for k, v in final_results.items()}
         elif self.cashflow_model == "milestone":
-            adjusted_results = {k: v * 1.02 for k, v in adjusted_results.items()}
+            final_results = {k: v * 1.02 for k, v in final_results.items()}
         elif self.cashflow_model == "delayed":
-            adjusted_results = {k: v * 1.05 for k, v in adjusted_results.items()}
+            final_results = {k: v * 1.05 for k, v in final_results.items()}
 
-        # Compute Gross Profit: (Adjusted Price - COGS) * order_quantity
-        gross_profits = {k: (v - self.base_cost) * order_quantity for k, v in adjusted_results.items()}
+        # Compute Gross Profit based on final prices:
+        gross_profits = {k: (v - self.base_cost) * order_quantity for k, v in final_results.items()}
 
-        # Select best pricing model based on the lowest adjusted price (per unit)
-        best_option = min(adjusted_results, key=adjusted_results.get)
-        return adjusted_results, gross_profits, best_option
+        # Select best pricing model based on the lowest final price (per unit)
+        best_option = min(final_results, key=final_results.get)
+        return raw_results, final_results, gross_profits, best_option
 
 # Sidebar: User Inputs
 
@@ -141,9 +149,11 @@ pricing_model = PricingModel(base_cost, margin, volume_discount, risk_factors, c
 
 with tabs[0]:
     st.title("ERD Pricing Model Evaluation - Results")
-    pricing_results, gross_profits, best_pricing_option = pricing_model.evaluate_deal(order_quantity)
+    raw_results, final_results, gross_profits, best_pricing_option = pricing_model.evaluate_deal(order_quantity)
+    # Create a summary dataframe
     df = pd.DataFrame({
-        "Price per Unit (€)": pricing_results,
+        "Raw Price per Unit (€)": raw_results,
+        "Final Price per Unit (€)": final_results,
         "Gross Profit (€)": gross_profits
     })
     st.dataframe(df)
@@ -153,28 +163,28 @@ with tabs[1]:
     st.title("Sensitivity Analysis")
     st.write("Analysis over a range of Order Quantities")
     quantities = np.arange(100, 501, 50)
-    cost_plus_prices = []
-    tiered_prices = []
+    raw_cp = []
+    final_cp = []
     value_based_prices = []
     best_option = []
     
     for qty in quantities:
-        results, _, best = pricing_model.evaluate_deal(qty)
-        cost_plus_prices.append(results["Cost-Plus Pricing"])
-        tiered_prices.append(results["Tiered Pricing"])
-        value_based_prices.append(results["Value-Based Pricing"])
+        raw, final, _, best = pricing_model.evaluate_deal(qty)
+        raw_cp.append(raw["Cost-Plus Pricing"])
+        final_cp.append(final["Cost-Plus Pricing"])
+        value_based_prices.append(final["Value-Based Pricing"])
         best_option.append(best)
     
     sa_df = pd.DataFrame({
         "Order Quantity": quantities,
-        "Cost-Plus Pricing": cost_plus_prices,
-        "Tiered Pricing": tiered_prices,
-        "Value-Based Pricing": value_based_prices,
+        "Raw Cost-Plus Price (€)": raw_cp,
+        "Final Cost-Plus Price (€)": final_cp,
+        "Value-Based Pricing (€)": value_based_prices,
         "Best Option": best_option
     })
     
     st.dataframe(sa_df)
-    st.line_chart(sa_df.set_index("Order Quantity")[["Cost-Plus Pricing", "Tiered Pricing", "Value-Based Pricing"]])
+    st.line_chart(sa_df.set_index("Order Quantity")[["Raw Cost-Plus Price (€)", "Final Cost-Plus Price (€)", "Value-Based Pricing (€)"]])
 
 with tabs[2]:
     st.title("Supply Chain EOQ Calculation")
