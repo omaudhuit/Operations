@@ -8,16 +8,21 @@ import matplotlib.pyplot as plt
 class PricingModel:
     
     def __init__(self, base_cost, margin, volume_discount, risk_factors, cashflow_model, 
-                 customer_value, cashflow_upfront, cashflow_milestone, cashflow_delayed):
+                 customer_value, cashflow_upfront, cashflow_milestone, cashflow_delayed,
+                 upfront_payment_pct, milestone_payment_pct, final_payment_pct):
         self.base_cost = base_cost
         self.margin = margin
         self.volume_discount = volume_discount
         self.risk_factors = risk_factors
         self.cashflow_model = cashflow_model
         self.customer_value = customer_value
-        self.cashflow_upfront = cashflow_upfront      # e.g., 5% discount => 0.05
-        self.cashflow_milestone = cashflow_milestone    # e.g., 2% surcharge => 0.02
-        self.cashflow_delayed = cashflow_delayed        # e.g., 5% surcharge => 0.05
+        self.cashflow_upfront = cashflow_upfront      # used for discount on upfront portion
+        self.cashflow_milestone = cashflow_milestone    # surcharge on milestone portion
+        self.cashflow_delayed = cashflow_delayed        # surcharge on final payment (delayed)
+        # Milestone payment structure parameters (each as a fraction, e.g., 0.3 for 30%)
+        self.upfront_payment_pct = upfront_payment_pct
+        self.milestone_payment_pct = milestone_payment_pct
+        self.final_payment_pct = final_payment_pct
 
     def get_volume_discount(self, order_quantity):
         """Determine volume discount based on thresholds."""
@@ -88,26 +93,29 @@ class PricingModel:
         total_risk_factor = sum(self.risk_factors.values()) / 100
         
         # Build raw results:
-        # For Cost‑Plus Pricing, use the baseline raw (without discount) and adjust for risk.
         raw_results = {
             "Cost-Plus Pricing": cp_raw_no_disc * (1 + total_risk_factor),
             "Tiered Pricing": tiered * (1 + total_risk_factor),
             "Value-Based Pricing": value_based * (1 + total_risk_factor)
         }
         
-        # Build final results:
-        # For Cost‑Plus Pricing, include the volume discount.
+        # Build final results (before cash flow adjustments):
         final_results = {
             "Cost-Plus Pricing": cp_final_with_disc * (1 + total_risk_factor),
             "Tiered Pricing": tiered * (1 + total_risk_factor),
             "Value-Based Pricing": value_based * (1 + total_risk_factor)
         }
         
-        # Apply cash flow adjustments to final results.
+        # Apply cash flow adjustments:
         if self.cashflow_model == "upfront":
             final_results = {k: v * (1 - self.cashflow_upfront) for k, v in final_results.items()}
         elif self.cashflow_model == "milestone":
-            final_results = {k: v * (1 + self.cashflow_milestone) for k, v in final_results.items()}
+            # Weighted sum for milestone structure with an additional discount on the upfront component.
+            final_results = {k: v * (
+                self.upfront_payment_pct * (1 - self.cashflow_upfront) +
+                self.milestone_payment_pct * (1 + self.cashflow_milestone) +
+                self.final_payment_pct * (1 + self.cashflow_delayed)
+            ) for k, v in final_results.items()}
         elif self.cashflow_model == "delayed":
             final_results = {k: v * (1 + self.cashflow_delayed) for k, v in final_results.items()}
         
@@ -117,7 +125,7 @@ class PricingModel:
         # Compute gross profit: (Final Adjusted Price per Unit - COGS) * Order Quantity.
         gross_profits = {k: (v - self.base_cost) * order_quantity for k, v in final_results.items()}
         
-        # Round all numerical results to 2 decimals.
+        # Round all numeric results to 2 decimals.
         raw_results = {k: round(v, 2) for k, v in raw_results.items()}
         final_results = {k: round(v, 2) for k, v in final_results.items()}
         vat_results = {k: round(v, 2) for k, v in vat_results.items()}
@@ -166,9 +174,9 @@ delayed_surcharge = st.sidebar.number_input("Delayed Cash Flow Surcharge (%)", m
 
 # Milestone Payment Arrangement Inputs
 st.sidebar.header("Milestone Payment Arrangement")
-upfront_payment_pct = st.sidebar.number_input("Upfront Payment (%)", min_value=0, max_value=100, value=0) / 100
-milestone_payment_pct = st.sidebar.number_input("Milestone Payment (%)", min_value=0, max_value=100, value=0) / 100
-final_payment_pct = st.sidebar.number_input("Final Payment (%)", min_value=0, max_value=100, value=0) / 100
+upfront_payment_pct = st.sidebar.number_input("Upfront Payment (%)", min_value=0, max_value=100, value=30) / 100
+milestone_payment_pct = st.sidebar.number_input("Milestone Payment (%)", min_value=0, max_value=100, value=40) / 100
+final_payment_pct = st.sidebar.number_input("Final Payment (%)", min_value=0, max_value=100, value=30) / 100
 
 # Supply Chain Inputs for EOQ Calculation
 st.sidebar.header("Supply Chain Inputs")
@@ -191,9 +199,10 @@ days_payables = st.sidebar.number_input("Days Payable Outstanding (DPO)", value=
 # Create Tabs for Results, Sensitivity Analysis, Supply Chain, and Cash Conversion Cycle
 tabs = st.tabs(["Results", "Sensitivity Analysis", "Supply Chain", "Cash Conversion Cycle"])
 
-# Instantiate Pricing Model
+# Instantiate Pricing Model with the new milestone parameters
 pricing_model = PricingModel(base_cost, margin, volume_discount, risk_factors, cashflow_model, 
-                             customer_value, upfront_discount, milestone_surcharge, delayed_surcharge)
+                             customer_value, upfront_discount, milestone_surcharge, delayed_surcharge,
+                             upfront_payment_pct, milestone_payment_pct, final_payment_pct)
 
 # Results Tab
 with tabs[0]:
@@ -271,7 +280,8 @@ with tabs[1]:
         sim_list = []
         for m in margins:
             temp_model = PricingModel(base_cost, m, volume_discount, risk_factors, cashflow_model,
-                                      customer_value, upfront_discount, milestone_surcharge, delayed_surcharge)
+                                      customer_value, upfront_discount, milestone_surcharge, delayed_surcharge,
+                                      upfront_payment_pct, milestone_payment_pct, final_payment_pct)
             _, _, _, gross, _ = temp_model.evaluate_deal(order_quantity)
             sim_list.append({
                 "Margin": m,
@@ -294,7 +304,8 @@ with tabs[1]:
                 "Competition Risk": r
             }
             temp_model = PricingModel(base_cost, margin, volume_discount, risk_dict, cashflow_model,
-                                      customer_value, upfront_discount, milestone_surcharge, delayed_surcharge)
+                                      customer_value, upfront_discount, milestone_surcharge, delayed_surcharge,
+                                      upfront_payment_pct, milestone_payment_pct, final_payment_pct)
             _, _, _, gross, _ = temp_model.evaluate_deal(order_quantity)
             sim_list.append({
                 "Total Risk (%)": r,
@@ -313,7 +324,8 @@ with tabs[1]:
         for i, m in enumerate(margins):
             for j, qty in enumerate(quantities):
                 temp_model = PricingModel(base_cost, m, volume_discount, risk_factors, cashflow_model,
-                                          customer_value, upfront_discount, milestone_surcharge, delayed_surcharge)
+                                          customer_value, upfront_discount, milestone_surcharge, delayed_surcharge,
+                                          upfront_payment_pct, milestone_payment_pct, final_payment_pct)
                 _, _, _, gross, _ = temp_model.evaluate_deal(qty)
                 heat_data[i, j] = gross["Cost-Plus Pricing"]
         fig, ax = plt.subplots()
