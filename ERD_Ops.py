@@ -58,8 +58,8 @@ class PricingModel:
         Returns:
             raw_results: Prices per unit after risk adjustments (before cash flow adjustments).
             final_results: Prices per unit after applying cash flow adjustments.
-            gross_profits: Gross profit calculated as (Final Price per Unit - COGS) * Order Quantity.
-            best_option: The best pricing model (lowest final price).
+            gross_profits: Gross profit calculated as (Final Adjusted Price per Unit - COGS) * Order Quantity.
+            best_option: The best pricing model (lowest final adjusted price).
         """
         cost_plus = self.cost_plus_pricing(order_quantity)
         tiered = self.tiered_pricing(order_quantity)
@@ -164,8 +164,8 @@ with tabs[0]:
         st.write("   - The raw price is computed as: **COGS / (1 - Margin)**.")
         st.write(f"   - For COGS = {base_cost} and Margin = {margin*100:.0f}%, Raw Price = {base_cost} / (1 - {margin:.2f}) ≈ {base_cost/(1-margin):.2f}.")
         st.write("2. **Volume Discount Application:**")
-        st.write("   - A volume discount is applied if the order quantity exceeds certain thresholds. "
-                 "For example, if a discount is defined for the applicable range, the raw price will be reduced accordingly.")
+        st.write("   - A volume discount is applied if the order quantity exceeds set thresholds. "
+                 "For example, if a discount is defined for that range, the raw price is reduced accordingly.")
     
     with st.expander("Explanation of Tiered Pricing Calculation"):
         st.write("1. **Tiered Pricing Raw Calculation:**")
@@ -176,19 +176,25 @@ with tabs[0]:
         st.write("     - If order quantity is ≥ 300, an extra 5% discount is applied.")
         st.write("   - If no volume discount is active, no extra discount is applied, and the raw price is used.")
     
+    with st.expander("Explanation of Value-Based Pricing Calculation"):
+        st.write("1. **Customer Perceived Value:**")
+        st.write("   - The value-based pricing method uses the customer’s perceived value directly as the price per unit.")
+        st.write("   - It does not derive from COGS or a margin calculation, but is based on what customers are willing to pay.")
+        st.write("   - This approach is typically used when the market supports a premium price or when differentiation adds value.")
+    
     with st.expander("Explanation of Risk Factor & Cash Flow Adjustments"):
         st.write("1. **Risk Factor Adjustment:**")
-        st.write("   - The calculated prices are increased by the sum of all risk factors (set as a percentage).")
-        st.write("   - For instance, if the total risk is 10%, prices are multiplied by 1.10.")
+        st.write("   - Prices are increased by the sum of all risk factors (as a percentage). For example, with a total risk of 10%, prices are multiplied by 1.10.")
         st.write("2. **Cash Flow Management Adjustment:**")
         st.write("   - After risk adjustments, a cash flow strategy is applied:")
-        st.write("     - 'upfront' applies a 5% discount (x 0.95),")
-        st.write("     - 'milestone' increases by 2% (x 1.02), and")
-        st.write("     - 'delayed' increases by 5% (x 1.05).")
+        st.write("     - 'upfront' applies a 5% discount (multiplies by 0.95),")
+        st.write("     - 'milestone' increases prices by 2% (multiplies by 1.02),")
+        st.write("     - 'delayed' increases prices by 5% (multiplies by 1.05).")
     
     with st.expander("Explanation of Gross Profit Calculation"):
-        st.write("Gross Profit is computed as: **(Final Adjusted Price per Unit - COGS) * Order Quantity**.")
-        st.write("This reflects the per-unit profit obtained after all adjustments, multiplied by the number of units ordered.")
+        st.write("Gross Profit is calculated as follows:")
+        st.write("   - **Gross Profit = (Final Adjusted Price per Unit - COGS) * Order Quantity**")
+        st.write("   - This reflects the profit per unit after all adjustments, multiplied by the number of units ordered.")
     
     st.success(f"Best Pricing Model: {best_pricing_option}")
 
@@ -224,6 +230,6 @@ with tabs[2]:
     # Explanation of EOQ impact on pricing
     with st.expander("How EOQ Impacts Pricing"):
         st.write("Optimizing your order quantity using the EOQ model helps minimize the total costs associated with ordering and holding inventory.")
-        st.write("A lower EOQ indicates that you can replenish stock more frequently with lower holding costs, which may allow you to negotiate better volume pricing or discounts from suppliers.")
-        st.write("On the sales side, achieving an optimal EOQ helps control overall costs, allowing for more competitive pricing and higher gross margins.")
-        st.write("Essentially, while EOQ is a supply chain metric, its impact on cost structure can influence your pricing strategy and ultimately improve profitability.")
+        st.write("A lower EOQ indicates that you can replenish stock more frequently with lower holding costs, often enabling better negotiations for volume pricing or discounts from suppliers.")
+        st.write("On the sales side, an optimal EOQ helps control overall costs, which can lead to more competitive pricing and higher gross margins.")
+        st.write("Essentially, while EOQ is a supply chain metric, its effect on the cost structure indirectly influences your pricing strategy and profitability.")
