@@ -25,16 +25,16 @@ class PricingModel:
 
     def cost_plus_pricing(self, order_quantity):
         """Computes the cost-plus price:
-           Price = COGS / (1 - margin) with an applied volume discount (if any)."""
+           Raw Price = COGS / (1 - margin); then if applicable, apply volume discount."""
         raw_price = self.base_cost / (1 - self.margin)
         vol_disc = self.get_volume_discount(order_quantity)
         return raw_price * (1 - vol_disc)
 
     def tiered_pricing(self, order_quantity):
-        """For tiered pricing we start from the raw cost-plus base, then apply:
-             - the volume discount (if set) and
-             - an extra discount if order_quantity thresholds are met.
-           If the volume discount is 0, no extra discount is applied."""
+        """For tiered pricing we start from the raw cost-plus base, then:
+             - Apply the volume discount, and if a discount is in effect,
+             - Apply an extra discount based on order quantity thresholds.
+           If no volume discount is set, extra discount is not applied."""
         raw_price = self.base_cost / (1 - self.margin)
         vol_disc = self.get_volume_discount(order_quantity)
         price_after_vol = raw_price * (1 - vol_disc)
@@ -56,9 +56,9 @@ class PricingModel:
         """
         Evaluates pricing models and computes gross profits.
         Returns:
-            raw_results: Prices after applying risk adjustments.
-            final_results: Prices after applying cash flow adjustments.
-            gross_profits: Gross profit calculated as (Final Price - COGS) * order_quantity.
+            raw_results: Prices per unit after risk adjustments (before cash flow adjustments).
+            final_results: Prices per unit after applying cash flow adjustments.
+            gross_profits: Gross profit calculated as (Final Price per Unit - COGS) * Order Quantity.
             best_option: The best pricing model (lowest final price).
         """
         cost_plus = self.cost_plus_pricing(order_quantity)
@@ -66,14 +66,14 @@ class PricingModel:
         value_based = self.value_based_pricing(order_quantity)
 
         # Apply risk factor adjustments
-        total_risk_factor = sum(self.risk_factors.values()) / 100  # converting percentage to multiplier
+        total_risk_factor = sum(self.risk_factors.values()) / 100  # converting % to multiplier
         raw_results = {
             "Cost-Plus Pricing": cost_plus * (1 + total_risk_factor),
             "Tiered Pricing": tiered * (1 + total_risk_factor),
             "Value-Based Pricing": value_based * (1 + total_risk_factor)
         }
 
-        # Save raw results before applying cash flow adjustments
+        # Save raw results before cash flow adjustments in final_results
         final_results = raw_results.copy()
 
         # Apply cash flow model impact
@@ -84,10 +84,10 @@ class PricingModel:
         elif self.cashflow_model == "delayed":
             final_results = {k: v * 1.05 for k, v in final_results.items()}
 
-        # Compute Gross Profit based on final prices:
+        # Compute Gross Profit: (Final Adjusted Price per Unit - COGS) * order_quantity
         gross_profits = {k: (v - self.base_cost) * order_quantity for k, v in final_results.items()}
 
-        # Select best pricing model based on the lowest final price (per unit)
+        # Select best pricing model based on the lowest final adjusted price
         best_option = min(final_results, key=final_results.get)
         return raw_results, final_results, gross_profits, best_option
 
@@ -150,13 +150,47 @@ pricing_model = PricingModel(base_cost, margin, volume_discount, risk_factors, c
 with tabs[0]:
     st.title("ERD Pricing Model Evaluation - Results")
     raw_results, final_results, gross_profits, best_pricing_option = pricing_model.evaluate_deal(order_quantity)
-    # Create a summary dataframe
+    
+    # Display the calculated values in a table
     df = pd.DataFrame({
         "Raw Price per Unit (€)": raw_results,
         "Final Price per Unit (€)": final_results,
         "Gross Profit (€)": gross_profits
     })
     st.dataframe(df)
+    
+    # Detailed explanations using expanders
+    with st.expander("Explanation of Cost-Plus Pricing Calculation"):
+        st.write("1. **Raw Price Calculation:**")
+        st.write("   - The raw price is computed as: **COGS / (1 - Margin)**.")
+        st.write(f"   - For COGS = {base_cost} and Margin = {margin*100:.0f}%, Raw Price = {base_cost} / (1 - {margin:.2f}) ≈ {base_cost/(1-margin):.2f}.")
+        st.write("2. **Volume Discount Application:**")
+        st.write("   - A volume discount is applied based on the order quantity threshold. "
+                 "If a discount is defined for the applicable threshold, the raw price is multiplied by (1 - Discount).")
+    
+    with st.expander("Explanation of Tiered Pricing Calculation"):
+        st.write("1. **Tiered Pricing Raw Calculation:**")
+        st.write("   - It starts with the same raw price: **COGS / (1 - Margin)**.")
+        st.write("2. **Tiered Discount:**")
+        st.write("   - If a volume discount is active, an extra discount is then applied:")
+        st.write("     - If order quantity >= 400: Extra 10% discount.")
+        st.write("     - If order quantity >= 300: Extra 5% discount.")
+        st.write("   - Otherwise (if no volume discount is set), the extra discount is not applied.")
+    
+    with st.expander("Explanation of Risk Factor & Cash Flow Adjustments"):
+        st.write("1. **Risk Factor Adjustment:**")
+        st.write("   - All calculated prices (for each model) are increased by the sum of risk factors (as a percentage).")
+        st.write("   - For example, if the total risk is 10%, the price will be multiplied by 1.10.")
+        st.write("2. **Cash Flow Management Adjustment:**")
+        st.write("   - After risk adjustments, a cash flow strategy is applied:")
+        st.write("     - 'upfront' applies a 5% discount (multiplies by 0.95),")
+        st.write("     - 'milestone' results in a 2% increase (multiplies by 1.02),")
+        st.write("     - 'delayed' results in a 5% increase (multiplies by 1.05).")
+    
+    with st.expander("Explanation of Gross Profit Calculation"):
+        st.write("Gross Profit is computed as: **(Final Adjusted Price per Unit - COGS) * Order Quantity**.")
+        st.write("This gives the total profit before other expenses, based solely on the pricing decision.")
+    
     st.success(f"Best Pricing Model: {best_pricing_option}")
 
 with tabs[1]:
@@ -167,14 +201,12 @@ with tabs[1]:
     final_cp = []
     value_based_prices = []
     best_option = []
-    
     for qty in quantities:
         raw, final, _, best = pricing_model.evaluate_deal(qty)
         raw_cp.append(raw["Cost-Plus Pricing"])
         final_cp.append(final["Cost-Plus Pricing"])
         value_based_prices.append(final["Value-Based Pricing"])
         best_option.append(best)
-    
     sa_df = pd.DataFrame({
         "Order Quantity": quantities,
         "Raw Cost-Plus Price (€)": raw_cp,
@@ -182,7 +214,6 @@ with tabs[1]:
         "Value-Based Pricing (€)": value_based_prices,
         "Best Option": best_option
     })
-    
     st.dataframe(sa_df)
     st.line_chart(sa_df.set_index("Order Quantity")[["Raw Cost-Plus Price (€)", "Final Cost-Plus Price (€)", "Value-Based Pricing (€)"]])
 
