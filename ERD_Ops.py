@@ -195,6 +195,9 @@ days_inventory = st.sidebar.number_input("Days Inventory Outstanding (DIO)", val
 days_receivables = st.sidebar.number_input("Days Sales Outstanding (DSO)", value=30)
 days_payables = st.sidebar.number_input("Days Payable Outstanding (DPO)", value=40)
 
+# Add new user input for delivery time
+delivery_days = st.sidebar.number_input("Delivery Time (days)", min_value=1, max_value=365, value=30)
+
 # ---------------------------
 # Create Tabs for Results, Sensitivity Analysis, Supply Chain, and Cash Conversion Cycle
 tabs = st.tabs(["Results", "Sensitivity Analysis", "Supply Chain", "Cash Conversion Cycle"])
@@ -350,7 +353,8 @@ with tabs[2]:
 # Cash Conversion Cycle Tab
 with tabs[3]:
     st.title("Cash Conversion Cycle")
-    st.write("This tab shows a timeline for the cash conversion cycle based on working capital inputs.")
+    st.write("This tab shows a timeline for the cash conversion cycle based on working capital inputs along with the cash flow milestones.")
+    
     # Calculate Cash Conversion Cycle (CCC = DIO + DSO - DPO)
     ccc = days_inventory + days_receivables - days_payables
     st.write(f"**Days Inventory Outstanding (DIO):** {days_inventory} days")
@@ -358,22 +362,30 @@ with tabs[3]:
     st.write(f"**Days Payables Outstanding (DPO):** {days_payables} days")
     st.write(f"**Cash Conversion Cycle (CCC):** {ccc} days")
     
-    # Timeline visualization: Plot DIO and DSO as stacked bars with an arrow showing DPO reduction
-    fig, ax = plt.subplots(figsize=(10, 3))
-    total = days_inventory + days_receivables
-    ax.broken_barh([(0, days_inventory)], (20, 9), facecolors='skyblue', label='DIO')
-    ax.broken_barh([(days_inventory, days_receivables)], (20, 9), facecolors='lightgreen', label='DSO')
-    ax.annotate('', xy=(ccc, 29), xytext=(total, 29),
-                arrowprops=dict(arrowstyle='<->', color='red', lw=2))
-    ax.text((total + ccc) / 2, 31, f'- DPO: {days_payables} days',
-            color='red', ha='center', va='bottom', fontsize=10)
+    # Create a dual-axis timeline chart.
+    fig, ax1 = plt.subplots(figsize=(10, 3))
     
-    # If the cash flow model is milestone, compute milestone payment breakdown and annotate on the chart.
+    # Plot the CCC timeline on the primary axis (ax1):
+    total = days_inventory + days_receivables
+    ax1.broken_barh([(0, days_inventory)], (20, 9), facecolors='skyblue', label='DIO')
+    ax1.broken_barh([(days_inventory, days_receivables)], (20, 9), facecolors='lightgreen', label='DSO')
+    ax1.annotate('', xy=(ccc, 29), xytext=(total, 29),
+                 arrowprops=dict(arrowstyle='<->', color='red', lw=2))
+    ax1.text((total + ccc) / 2, 31, f'- DPO: {days_payables} days',
+             color='red', ha='center', va='bottom', fontsize=10)
+    ax1.set_xlim(0, max(total, delivery_days) + 5)
+    ax1.set_ylim(0, 45)
+    ax1.set_xlabel('Days')
+    ax1.set_yticks([])
+    ax1.legend(loc='upper right', fontsize=9)
+    ax1.set_title('Cash Conversion Cycle Timeline')
+    
+    # If milestone cash flow structure, compute milestone payment breakdown.
     if cashflow_model == "milestone":
         # Re-evaluate the deal to get the final prices and best pricing model.
         _, final_results_tmp, _, _, best_option_tmp = pricing_model.evaluate_deal(order_quantity)
         best_final_price = final_results_tmp[best_option_tmp]
-        # Compute the weighted factor used in milestone adjustments:
+        # Compute the weighted factor used in milestone adjustments.
         weighted_factor = (upfront_payment_pct * (1 - upfront_discount) +
                            milestone_payment_pct * (1 + milestone_surcharge) +
                            final_payment_pct * (1 + delayed_surcharge))
@@ -381,36 +393,39 @@ with tabs[3]:
         ratio_upfront = (upfront_payment_pct * (1 - upfront_discount)) / weighted_factor
         ratio_milestone = (milestone_payment_pct * (1 + milestone_surcharge)) / weighted_factor
         ratio_final = (final_payment_pct * (1 + delayed_surcharge)) / weighted_factor
-        # Compute payment amounts per unit.
+        # Compute payment amounts per unit and then total payment amounts.
         amount_upfront = best_final_price * ratio_upfront
         amount_milestone = best_final_price * ratio_milestone
         amount_final = best_final_price * ratio_final
-        # Multiply by order quantity to get total payment amounts.
         total_amount_upfront = amount_upfront * order_quantity
         total_amount_milestone = amount_milestone * order_quantity
         total_amount_final = amount_final * order_quantity
+
+        # Define key events for the order:
+        order_day = 0
+        milestone_day = delivery_days / 2
+        delivery_day = delivery_days
         
-        # Prepare annotation text for the breakdown.
-        breakdown_text = (f"Milestone Payment Breakdown (Order Total):\n"
-                          f"Upfront: €{total_amount_upfront:.2f}   |   "
-                          f"Milestone: €{total_amount_milestone:.2f}   |   "
-                          f"Final: €{total_amount_final:.2f}")
-        # Place the breakdown annotation below the timeline.
-        ax.text(total/2, 5, breakdown_text, ha='center', fontsize=10,
-                bbox=dict(facecolor='white', edgecolor='black', alpha=0.7))
+        # Create a twin axis to plot cashflow data.
+        ax2 = ax1.twinx()
+        # Plot the cashflow milestones as a dashed line with markers.
+        events_x = [order_day, milestone_day, delivery_day]
+        payments_y = [total_amount_upfront, total_amount_milestone, total_amount_final]
+        ax2.plot(events_x, payments_y, marker='o', linestyle='--', color='purple', label='Milestone Payments')
+        for x, y, label in zip(events_x, payments_y, ["Upfront", "Milestone", "Final"]):
+            ax2.text(x, y, f"{label}\n€{y:.2f}", color='purple', ha='center', va='bottom', fontsize=10)
+        ax2.set_ylabel('Cash Flow Amount (€)')
+        max_cash = max(payments_y) if payments_y else 1
+        ax2.set_ylim(0, max_cash * 1.3)
+        ax2.legend(loc='upper left', fontsize=9)
     
-    ax.set_xlim(0, total + max(0, days_payables) + 5)
-    ax.set_ylim(0, 45)
-    ax.set_xlabel('Days')
-    ax.set_yticks([])
-    ax.legend(loc='upper right', fontsize=9)
-    ax.set_title('Cash Conversion Cycle Timeline')
     plt.tight_layout()
     st.pyplot(fig)
     
     timeline = f"""
     **Timeline:**
     
+    Order Placement at Day 0, Delivery Time: {delivery_days} days  
     Inventory → Sales → Receivables Collection  
     [DIO: {days_inventory} days] → [DSO: {days_receivables} days]  
     → Subtract [DPO: {days_payables} days]  
