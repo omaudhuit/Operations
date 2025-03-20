@@ -13,8 +13,10 @@ class PricingModel:
         self.customer_value = customer_value
 
     def cost_plus_pricing(self, order_quantity):
-        """Cost-plus pricing model with margin consideration."""
-        return (self.base_cost * (1 + self.margin)) * (1 - self.volume_discount.get(order_quantity, 0))
+        """Cost-plus pricing model with margin consideration.
+           Selling price is computed as COGS / (1 - margin) and a volume discount is applied."""
+        base_price = self.base_cost / (1 - self.margin)
+        return base_price * (1 - self.volume_discount.get(order_quantity, 0))
 
     def tiered_pricing(self, order_quantity):
         """Tiered pricing based on volume."""
@@ -31,7 +33,8 @@ class PricingModel:
         return self.customer_value
 
     def evaluate_deal(self, order_quantity):
-        """Evaluates pricing models, applies adjustments, and computes gross profits."""
+        """Evaluates pricing models, applies adjustments, and computes gross profits.
+           Gross Profit is computed as (Adjusted Price per Unit - COGS) * Order Quantity."""
         cost_plus = self.cost_plus_pricing(order_quantity)
         tiered = self.tiered_pricing(order_quantity)
         value_based = self.value_based_pricing(order_quantity)
@@ -52,7 +55,7 @@ class PricingModel:
         elif self.cashflow_model == "delayed":
             adjusted_results = {k: v * 1.05 for k, v in adjusted_results.items()}  # 5% increase
 
-        # Compute Gross Profit for each pricing model (per unit profit * order quantity)
+        # Compute Gross Profit for each pricing model as (Adjusted Price - COGS) * order_quantity
         gross_profits = {k: (v - self.base_cost) * order_quantity for k, v in adjusted_results.items()}
 
         # Select best pricing model based on the lowest adjusted price (per unit)
