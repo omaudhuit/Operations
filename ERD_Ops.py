@@ -13,20 +13,33 @@ class PricingModel:
         self.customer_value = customer_value
 
     def cost_plus_pricing(self, order_quantity):
-        """Cost-plus pricing model with margin consideration.
-           Selling price is computed as COGS / (1 - margin) and a volume discount is applied."""
-        base_price = self.base_cost / (1 - self.margin)
-        return base_price * (1 - self.volume_discount.get(order_quantity, 0))
+        """Computes the cost-plus price:
+           Price = COGS / (1 - margin) with an applied volume discount (if any)."""
+        raw_price = self.base_cost / (1 - self.margin)
+        vol_disc = self.volume_discount.get(order_quantity, 0)
+        return raw_price * (1 - vol_disc)
 
     def tiered_pricing(self, order_quantity):
-        """Tiered pricing based on volume."""
-        base_price = self.cost_plus_pricing(order_quantity)
-        if order_quantity >= 400:
-            return base_price * 0.9
-        elif order_quantity >= 300:
-            return base_price * 0.95
+        """For tiered pricing we start from the raw cost-plus base (without any discount)
+           and then apply:
+             - the volume discount (if set) and
+             - an extra discount if order_quantity thresholds are met.
+           If the volume discount is 0, no additional discount is applied."""
+        raw_price = self.base_cost / (1 - self.margin)
+        vol_disc = self.volume_discount.get(order_quantity, 0)
+        # Apply volume discount first
+        price_after_vol = raw_price * (1 - vol_disc)
+        if vol_disc == 0:
+            # No extra discount if user disabled volume discount
+            return raw_price
         else:
-            return base_price
+            # Apply an extra tiered discount based on order quantity
+            if order_quantity >= 400:
+                return price_after_vol * 0.9
+            elif order_quantity >= 300:
+                return price_after_vol * 0.95
+            else:
+                return price_after_vol
 
     def value_based_pricing(self, order_quantity):
         """Value-based pricing model using the customer perceived value."""
@@ -49,13 +62,13 @@ class PricingModel:
 
         # Apply cash flow model impact
         if self.cashflow_model == "upfront":
-            adjusted_results = {k: v * 0.95 for k, v in adjusted_results.items()}  # 5% discount
+            adjusted_results = {k: v * 0.95 for k, v in adjusted_results.items()}
         elif self.cashflow_model == "milestone":
-            adjusted_results = {k: v * 1.02 for k, v in adjusted_results.items()}  # 2% increase
+            adjusted_results = {k: v * 1.02 for k, v in adjusted_results.items()}
         elif self.cashflow_model == "delayed":
-            adjusted_results = {k: v * 1.05 for k, v in adjusted_results.items()}  # 5% increase
+            adjusted_results = {k: v * 1.05 for k, v in adjusted_results.items()}
 
-        # Compute Gross Profit for each pricing model as (Adjusted Price - COGS) * order_quantity
+        # Compute Gross Profit: (Adjusted Price - COGS) * order_quantity
         gross_profits = {k: (v - self.base_cost) * order_quantity for k, v in adjusted_results.items()}
 
         # Select best pricing model based on the lowest adjusted price (per unit)
@@ -67,8 +80,8 @@ class PricingModel:
 st.sidebar.header("User Inputs")
 
 # Pricing Model Inputs
-base_cost = st.sidebar.number_input("COGS per Unit (€)", value=2000)
-margin = st.sidebar.number_input("Profit Margin (%)", min_value=0, max_value=100, value=30) / 100
+base_cost = st.sidebar.number_input("COGS per Unit (€)", value=1179)
+margin = st.sidebar.number_input("Profit Margin (%)", min_value=0, max_value=100, value=44) / 100
 customer_value = st.sidebar.number_input("Customer Perceived Value (€)", value=2500)
 
 # Order Quantity Input
@@ -76,12 +89,12 @@ order_quantity = st.sidebar.number_input("Order Quantity", value=300)
 
 # Volume Discount Inputs as User Defined
 st.sidebar.header("Volume Discount Inputs")
-discount_200 = st.sidebar.number_input("Discount at Order Quantity 200 (%)", min_value=0, max_value=100, value=2) / 100
-discount_300 = st.sidebar.number_input("Discount at Order Quantity 300 (%)", min_value=0, max_value=100, value=5) / 100
-discount_400 = st.sidebar.number_input("Discount at Order Quantity 400 (%)", min_value=0, max_value=100, value=10) / 100
+discount_200 = st.sidebar.number_input("Discount at Order Quantity 200 (%)", min_value=0, max_value=100, value=0) / 100
+discount_300 = st.sidebar.number_input("Discount at Order Quantity 300 (%)", min_value=0, max_value=100, value=0) / 100
+discount_400 = st.sidebar.number_input("Discount at Order Quantity 400 (%)", min_value=0, max_value=100, value=0) / 100
 volume_discount = {200: discount_200, 300: discount_300, 400: discount_400}
 
-# Risk Factor Inputs (using number_input instead of slider)
+# Risk Factor Inputs
 st.sidebar.subheader("Risk Factors (as % Impact)")
 supply_chain_risk = st.sidebar.number_input("Supply Chain Risk (%)", min_value=0, max_value=10, value=5)
 regulatory_risk = st.sidebar.number_input("Regulatory Compliance Risk (%)", min_value=0, max_value=10, value=3)
@@ -120,7 +133,6 @@ pricing_model = PricingModel(base_cost, margin, volume_discount, risk_factors, c
 
 with tabs[0]:
     st.title("ERD Pricing Model Evaluation - Results")
-    # Evaluate pricing for the selected order quantity
     pricing_results, gross_profits, best_pricing_option = pricing_model.evaluate_deal(order_quantity)
     df = pd.DataFrame({
         "Price per Unit (€)": pricing_results,
