@@ -359,7 +359,7 @@ with tabs[3]:
     st.write(f"**Cash Conversion Cycle (CCC):** {ccc} days")
     
     # Timeline visualization: Plot DIO and DSO as stacked bars with an arrow showing DPO reduction
-    fig, ax = plt.subplots(figsize=(10, 2))
+    fig, ax = plt.subplots(figsize=(10, 3))
     total = days_inventory + days_receivables
     ax.broken_barh([(0, days_inventory)], (20, 9), facecolors='skyblue', label='DIO')
     ax.broken_barh([(days_inventory, days_receivables)], (20, 9), facecolors='lightgreen', label='DSO')
@@ -367,8 +367,40 @@ with tabs[3]:
                 arrowprops=dict(arrowstyle='<->', color='red', lw=2))
     ax.text((total + ccc) / 2, 31, f'- DPO: {days_payables} days',
             color='red', ha='center', va='bottom', fontsize=10)
+    
+    # If the cash flow model is milestone, compute milestone payment breakdown and annotate on the chart.
+    if cashflow_model == "milestone":
+        # Re-evaluate the deal to get the final prices and best pricing model.
+        _, final_results_tmp, _, _, best_option_tmp = pricing_model.evaluate_deal(order_quantity)
+        best_final_price = final_results_tmp[best_option_tmp]
+        # Compute the weighted factor used in milestone adjustments:
+        weighted_factor = (upfront_payment_pct * (1 - upfront_discount) +
+                           milestone_payment_pct * (1 + milestone_surcharge) +
+                           final_payment_pct * (1 + delayed_surcharge))
+        # Compute relative ratios for each payment component.
+        ratio_upfront = (upfront_payment_pct * (1 - upfront_discount)) / weighted_factor
+        ratio_milestone = (milestone_payment_pct * (1 + milestone_surcharge)) / weighted_factor
+        ratio_final = (final_payment_pct * (1 + delayed_surcharge)) / weighted_factor
+        # Compute payment amounts per unit.
+        amount_upfront = best_final_price * ratio_upfront
+        amount_milestone = best_final_price * ratio_milestone
+        amount_final = best_final_price * ratio_final
+        # Multiply by order quantity to get total payment amounts.
+        total_amount_upfront = amount_upfront * order_quantity
+        total_amount_milestone = amount_milestone * order_quantity
+        total_amount_final = amount_final * order_quantity
+        
+        # Prepare annotation text for the breakdown.
+        breakdown_text = (f"Milestone Payment Breakdown (Order Total):\n"
+                          f"Upfront: €{total_amount_upfront:.2f}   |   "
+                          f"Milestone: €{total_amount_milestone:.2f}   |   "
+                          f"Final: €{total_amount_final:.2f}")
+        # Place the breakdown annotation below the timeline.
+        ax.text(total/2, 5, breakdown_text, ha='center', fontsize=10,
+                bbox=dict(facecolor='white', edgecolor='black', alpha=0.7))
+    
     ax.set_xlim(0, total + max(0, days_payables) + 5)
-    ax.set_ylim(15, 45)
+    ax.set_ylim(0, 45)
     ax.set_xlabel('Days')
     ax.set_yticks([])
     ax.legend(loc='upper right', fontsize=9)
@@ -385,32 +417,3 @@ with tabs[3]:
     *Net Cash Conversion Cycle = {ccc} days*
     """
     st.markdown(timeline)
-    
-    # If the cash flow model is set to milestone, display the payment breakdown amounts for the entire order.
-    if cashflow_model == "milestone":
-        # Re-evaluate the deal to get the final prices and best pricing model.
-        _, final_results_tmp, _, _, best_option_tmp = pricing_model.evaluate_deal(order_quantity)
-        best_final_price = final_results_tmp[best_option_tmp]
-        # Compute the weighted factor used in milestone adjustments:
-        weighted_factor = (upfront_payment_pct * (1 - upfront_discount) +
-                           milestone_payment_pct * (1 + milestone_surcharge) +
-                           final_payment_pct * (1 + delayed_surcharge))
-        # Compute relative ratios for each payment component.
-        ratio_upfront = (upfront_payment_pct * (1 - upfront_discount)) / weighted_factor
-        ratio_milestone = (milestone_payment_pct * (1 + milestone_surcharge)) / weighted_factor
-        ratio_final = (final_payment_pct * (1 + delayed_surcharge)) / weighted_factor
-        
-        # Compute payment amounts per unit.
-        amount_upfront = best_final_price * ratio_upfront
-        amount_milestone = best_final_price * ratio_milestone
-        amount_final = best_final_price * ratio_final
-        
-        # Multiply by order quantity to get total payment amounts.
-        total_amount_upfront = amount_upfront * order_quantity
-        total_amount_milestone = amount_milestone * order_quantity
-        total_amount_final = amount_final * order_quantity
-        
-        st.write(f"**Milestone Payment Breakdown for the Entire Order (Best Pricing Model: {best_option_tmp}):**")
-        st.write(f"Upfront Payment: €{total_amount_upfront:.2f}")
-        st.write(f"Milestone Payment: €{total_amount_milestone:.2f}")
-        st.write(f"Final Payment: €{total_amount_final:.2f}")
