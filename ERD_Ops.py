@@ -62,48 +62,63 @@ class PricingModel:
         """
         Evaluates pricing models and computes gross profits.
         Returns:
-            raw_results: Prices per unit after risk adjustments (before cash flow adjustments).
+            raw_results: Prices per unit after risk adjustments (before cash flow adjustments). 
+                         For Cost‑Plus Pricing, the raw price excludes volume discount.
             final_results: Prices per unit after applying cash flow adjustments.
+                           For Cost‑Plus Pricing, the final price includes the volume discount.
             vat_results: Final prices including VAT (24%).
             gross_profits: Gross profit calculated as (Final Adjusted Price per Unit - COGS) * Order Quantity.
             best_option: The best pricing model (based on highest gross profit).
         """
-        cost_plus = self.cost_plus_pricing(order_quantity)
+        # Compute baseline raw price (no volume discount) for cost-plus pricing
+        cp_raw_no_disc = self.base_cost / (1 - self.margin)
+        # Compute cost-plus final price including volume discount (using our function)
+        cp_final_with_disc = self.cost_plus_pricing(order_quantity)
+        
+        # Calculate pricing for the other models using the existing functions:
         tiered = self.tiered_pricing(order_quantity)
         value_based = self.value_based_pricing(order_quantity)
-
-        # Apply risk factor adjustments
-        total_risk_factor = sum(self.risk_factors.values()) / 100  # converting % into multiplier
+        
+        # Calculate total risk factor multiplier from risk factors
+        total_risk_factor = sum(self.risk_factors.values()) / 100
+        
+        # Build raw results:
+        # For Cost-Plus Pricing, use baseline raw (without volume discount) and then adjust for risk.
         raw_results = {
-            "Cost-Plus Pricing": cost_plus * (1 + total_risk_factor),
+            "Cost-Plus Pricing": cp_raw_no_disc * (1 + total_risk_factor),
             "Tiered Pricing": tiered * (1 + total_risk_factor),
             "Value-Based Pricing": value_based * (1 + total_risk_factor)
         }
-
-        # Save raw results before cash flow adjustments in final_results
-        final_results = raw_results.copy()
-
-        # Apply cash flow model impact based on user-defined multipliers
+        
+        # Build final results:
+        # For Cost-Plus Pricing, include the volume discount.
+        final_results = {
+            "Cost-Plus Pricing": cp_final_with_disc * (1 + total_risk_factor),
+            "Tiered Pricing": tiered * (1 + total_risk_factor),
+            "Value-Based Pricing": value_based * (1 + total_risk_factor)
+        }
+        
+        # Apply cash flow adjustments to final results
         if self.cashflow_model == "upfront":
             final_results = {k: v * (1 - self.cashflow_upfront) for k, v in final_results.items()}
         elif self.cashflow_model == "milestone":
             final_results = {k: v * (1 + self.cashflow_milestone) for k, v in final_results.items()}
         elif self.cashflow_model == "delayed":
             final_results = {k: v * (1 + self.cashflow_delayed) for k, v in final_results.items()}
-
-        # Compute VAT on final price (24% VAT in Greece)
+        
+        # Compute VAT on final prices (24% VAT in Greece)
         vat_results = {k: v * 1.24 for k, v in final_results.items()}
-
-        # Compute Gross Profit: (Final Adjusted Price per Unit - COGS) * Order Quantity
+        
+        # Compute gross profit: (Final Adjusted Price per Unit - COGS) * Order Quantity
         gross_profits = {k: (v - self.base_cost) * order_quantity for k, v in final_results.items()}
 
-        # Round all results to 2 decimal places
+        # Round all numerical results to 2 decimals.
         raw_results = {k: round(v, 2) for k, v in raw_results.items()}
         final_results = {k: round(v, 2) for k, v in final_results.items()}
         vat_results = {k: round(v, 2) for k, v in vat_results.items()}
         gross_profits = {k: round(v, 2) for k, v in gross_profits.items()}
-
-        # Select best pricing model based on the highest Gross Profit
+        
+        # Select best pricing option based on highest gross profit.
         best_option = max(gross_profits, key=gross_profits.get)
         return raw_results, final_results, vat_results, gross_profits, best_option
 
@@ -116,7 +131,7 @@ margin = st.sidebar.number_input("Profit Margin (%)", min_value=0, max_value=100
 customer_value = st.sidebar.number_input("Customer Perceived Value (€)", value=2500)
 
 # Order Quantity Input
-order_quantity = st.sidebar.number_input("Order Quantity", value=300)
+order_quantity = st.sidebar.number_input("Order Quantity", value=1)
 
 # Volume Discount Inputs as User Defined
 st.sidebar.header("Volume Discount Inputs")
@@ -127,10 +142,10 @@ volume_discount = {200: discount_200, 300: discount_300, 400: discount_400}
 
 # Risk Factor Inputs
 st.sidebar.subheader("Risk Factors (as % Impact)")
-supply_chain_risk = st.sidebar.number_input("Supply Chain Risk (%)", min_value=0, max_value=10, value=5)
-regulatory_risk = st.sidebar.number_input("Regulatory Compliance Risk (%)", min_value=0, max_value=10, value=3)
-payment_risk = st.sidebar.number_input("Payment Delay Risk (%)", min_value=0, max_value=10, value=4)
-competition_risk = st.sidebar.number_input("Competitive Market Pressure (%)", min_value=0, max_value=10, value=2)
+supply_chain_risk = st.sidebar.number_input("Supply Chain Risk (%)", min_value=0, max_value=10, value=0)
+regulatory_risk = st.sidebar.number_input("Regulatory Compliance Risk (%)", min_value=0, max_value=10, value=0)
+payment_risk = st.sidebar.number_input("Payment Delay Risk (%)", min_value=0, max_value=10, value=0)
+competition_risk = st.sidebar.number_input("Competitive Market Pressure (%)", min_value=0, max_value=10, value=0)
 risk_factors = {
     "Supply Chain Risk": supply_chain_risk,
     "Regulatory Risk": regulatory_risk,
@@ -141,9 +156,9 @@ risk_factors = {
 # Cash Flow Inputs
 st.sidebar.subheader("Cash Flow Management Strategy")
 cashflow_model = st.sidebar.selectbox("Select Payment Structure", ["upfront", "milestone", "delayed"])
-upfront_discount = st.sidebar.number_input("Upfront Cash Flow Discount (%)", min_value=0, max_value=100, value=5) / 100
-milestone_surcharge = st.sidebar.number_input("Milestone Cash Flow Surcharge (%)", min_value=0, max_value=100, value=2) / 100
-delayed_surcharge = st.sidebar.number_input("Delayed Cash Flow Surcharge (%)", min_value=0, max_value=100, value=5) / 100
+upfront_discount = st.sidebar.number_input("Upfront Cash Flow Discount (%)", min_value=0, max_value=100, value=0) / 100
+milestone_surcharge = st.sidebar.number_input("Milestone Cash Flow Surcharge (%)", min_value=0, max_value=100, value=0) / 100
+delayed_surcharge = st.sidebar.number_input("Delayed Cash Flow Surcharge (%)", min_value=0, max_value=100, value=0) / 100
 
 # Supply Chain Inputs for EOQ Calculation
 st.sidebar.header("Supply Chain Inputs")
