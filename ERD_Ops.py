@@ -353,19 +353,17 @@ with tabs[2]:
 # Cash Conversion Cycle Tab
 with tabs[3]:
     st.title("Cash Conversion Cycle")
-    st.write("This tab shows a timeline for the cash conversion cycle based on working capital inputs along with the cash flow milestones.")
+    st.write("This tab shows a timeline for the cash conversion cycle based on working capital inputs along with cash flow milestones.")
     
-    # Calculate Cash Conversion Cycle (CCC = DIO + DSO - DPO)
+    # Calculate CCC = DIO + DSO - DPO
     ccc = days_inventory + days_receivables - days_payables
     st.write(f"**Days Inventory Outstanding (DIO):** {days_inventory} days")
     st.write(f"**Days Sales Outstanding (DSO):** {days_receivables} days")
     st.write(f"**Days Payables Outstanding (DPO):** {days_payables} days")
     st.write(f"**Cash Conversion Cycle (CCC):** {ccc} days")
     
-    # Create a dual-axis timeline chart.
+    # Create the primary timeline chart (CCC timeline).
     fig, ax1 = plt.subplots(figsize=(10, 3))
-    
-    # Plot the CCC timeline on the primary axis (ax1):
     total = days_inventory + days_receivables
     ax1.broken_barh([(0, days_inventory)], (20, 9), facecolors='skyblue', label='DIO')
     ax1.broken_barh([(days_inventory, days_receivables)], (20, 9), facecolors='lightgreen', label='DSO')
@@ -380,35 +378,35 @@ with tabs[3]:
     ax1.legend(loc='upper right', fontsize=9)
     ax1.set_title('Cash Conversion Cycle Timeline')
     
-    # If milestone cash flow structure, compute milestone payment breakdown.
+    # If milestone cash flow structure is used, compute milestone payment breakdown
+    # and plot the cash flow events on a secondary axis.
     if cashflow_model == "milestone":
-        # Re-evaluate the deal to get the final prices and best pricing model.
+        # Evaluate the deal to get the best final unit price.
         _, final_results_tmp, _, _, best_option_tmp = pricing_model.evaluate_deal(order_quantity)
         best_final_price = final_results_tmp[best_option_tmp]
-        # Compute the weighted factor used in milestone adjustments.
+        # Compute the weighted factor for milestone adjustments.
         weighted_factor = (upfront_payment_pct * (1 - upfront_discount) +
                            milestone_payment_pct * (1 + milestone_surcharge) +
                            final_payment_pct * (1 + delayed_surcharge))
-        # Compute relative ratios for each payment component.
         ratio_upfront = (upfront_payment_pct * (1 - upfront_discount)) / weighted_factor
         ratio_milestone = (milestone_payment_pct * (1 + milestone_surcharge)) / weighted_factor
         ratio_final = (final_payment_pct * (1 + delayed_surcharge)) / weighted_factor
-        # Compute payment amounts per unit and then total payment amounts.
+        # Compute the per-unit milestone payment amounts.
         amount_upfront = best_final_price * ratio_upfront
         amount_milestone = best_final_price * ratio_milestone
         amount_final = best_final_price * ratio_final
+        # Multiply by order quantity to get the total payment amounts.
         total_amount_upfront = amount_upfront * order_quantity
         total_amount_milestone = amount_milestone * order_quantity
         total_amount_final = amount_final * order_quantity
 
-        # Define key events for the order:
+        # Define key timeline events:
         order_day = 0
         milestone_day = delivery_days / 2
         delivery_day = delivery_days
         
-        # Create a twin axis to plot cashflow data.
+        # Create a secondary y-axis to plot cash flow.
         ax2 = ax1.twinx()
-        # Plot the cashflow milestones as a dashed line with markers.
         events_x = [order_day, milestone_day, delivery_day]
         payments_y = [total_amount_upfront, total_amount_milestone, total_amount_final]
         ax2.plot(events_x, payments_y, marker='o', linestyle='--', color='purple', label='Milestone Payments')
